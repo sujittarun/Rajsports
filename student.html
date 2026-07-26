@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f6f5f1">
+<title>Student · Raj Sports</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="assets/css/app.css?v=2">
+<style>
+  .hero { display: flex; align-items: center; gap: 15px; padding: 20px 16px 16px; }
+  .hero .avatar { width: 56px; height: 56px; border-radius: 18px; font-size: 18px; }
+  .hero h1 { font-size: 22px; }
+  .enr { padding: 16px; border-top: 1px solid var(--hair); }
+  .enr-top { display: flex; align-items: flex-start; gap: 10px; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 5px 16px; font-size: 13px; margin-top: 12px; }
+  .kv dt { color: var(--text-3); }
+  .kv dd { margin: 0; font-weight: 560; }
+  .flag {
+    display: flex; gap: 9px; align-items: center; margin: 0 16px 14px;
+    padding: 11px 13px; border-radius: var(--r-chip);
+    background: var(--overdue-haze); color: var(--overdue);
+    font-size: 12.5px; font-weight: 560; line-height: 1.5;
+  }
+  /* Timeline: a hairline with dots, not a heavy card per event. The
+     history is context, not the point of the screen. */
+  .tl { position: relative; padding: 6px 16px 18px 36px; }
+  .tl::before {
+    content: ""; position: absolute; left: 22px; top: 14px; bottom: 20px;
+    width: 1px; background: var(--hair);
+  }
+  .tl-i { position: relative; padding: 10px 0; }
+  .tl-i::before {
+    content: ""; position: absolute; left: -18px; top: 16px;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--text-3); box-shadow: 0 0 0 3px var(--surface);
+  }
+  .tl-i.is-pay::before { background: var(--volt); }
+  .tl-i.is-rem::before { background: var(--due); }
+  .tl-t { font-weight: 600; font-size: 13.5px; }
+  .tl-s { font-size: 11.5px; color: var(--text-3); }
+  .opt-row {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    padding: 13px 14px; margin-bottom: 8px;
+    background: var(--sunken); border: 1px solid var(--hair);
+    border-radius: var(--r-chip); color: var(--text); font: inherit;
+    transition: transform 150ms var(--spring), border-color 170ms var(--ease);
+  }
+  .opt-row:active { transform: scale(0.985); }
+  .opt-row.is-on { border-color: var(--volt); background: var(--volt-haze); }
+  .opt-row b { display: block; font-weight: 640; font-size: 14px; }
+  .opt-row span { font-size: 12px; color: var(--text-3); }
+</style>
+</head>
+<body>
+  <header class="topbar"></header>
+
+  <main class="wrap">
+    <a class="btn btn-sm btn-ghost" href="students.html" style="margin:14px 0 4px">‹ All students</a>
+    <div class="card section reveal" id="card"></div>
+    <section class="section reveal">
+      <div class="card"><div class="card-hd"><h2>History</h2></div><div id="tl"></div></div>
+    </section>
+  </main>
+
+  <nav class="nav"></nav>
+
+<script src="assets/js/cloud.js?v=2"></script>
+<script src="assets/js/core.js?v=2"></script>
+<script>
+(function () {
+  if (!App.requireStaff()) return;
+  App.shell("students", "Student");
+  RS.track("page_view");
+
+  var id = +new URLSearchParams(location.search).get("id");
+  var card = App.$("#card"), tlHost = App.$("#tl");
+  var m = null, ref = null, cfg = {};
+
+  if (!id) { location.replace("students.html"); return; }
+  App.skeleton(card, 3);
+  App.skeleton(tlHost, 3);
+  load();
+
+  function load() {
+    return Promise.all([RS.reference(), RS.student(id), RS.tenantConfig()])
+      .then(function (r) {
+        ref = r[0]; m = r[1]; cfg = Object.assign({ brand: "Raj Sports" }, r[2] || {});
+        if (!m) { App.empty(card, "Student not found"); tlHost.innerHTML = ""; return; }
+        document.title = m.name + " · Raj Sports";
+        App.$(".topbar h1").textContent = m.name;
+        renderCard();
+        return RS.timeline(id).then(renderTimeline);
+      }).catch(function (e) { App.fail(card, e); });
+  }
+
+  function renderCard() {
+    var phone = m.parent_phone || m.phone;
+    var wa = App.waLink(phone, "Hello from " + cfg.brand + "!");
+    var tel = App.telLink(phone);
+
+    card.innerHTML =
+      '<div class="hero">' +
+        '<div class="avatar">' + App.esc(App.initials(m.name)) + "</div>" +
+        '<div class="row-main"><h1>' + App.esc(m.name) + "</h1>" +
+          '<div class="row-s">' +
+            App.esc([m.parent_name, phone ? App.phone10(phone) : "No phone saved"]
+              .filter(Boolean).join(" · ")) + "</div></div>" +
+      "</div>" +
+      (m.whatsapp_status !== "active"
+        ? '<div class="flag"><span>!</span><span>WhatsApp is ' +
+          (m.whatsapp_status === "wrong_number" ? "marked as a wrong number" : "opted out") +
+          ", so automatic reminders are paused for this parent.</span></div>"
+        : "") +
+      '<div class="btn-row" style="padding:0 16px 16px">' +
+        (wa  ? '<a class="btn btn-primary btn-sm" href="' + wa + '" target="_blank" rel="noopener">WhatsApp</a>' : "") +
+        (tel ? '<a class="btn btn-sm" href="' + tel + '">Call</a>' : "") +
+        '<button class="btn btn-sm" data-edit>Edit</button>' +
+        '<button class="btn btn-sm" data-wastatus>WhatsApp status</button>' +
+      "</div>" +
+      (m.enrollments || []).map(enrollment).join("") +
+      '<div style="padding:15px 16px;border-top:1px solid var(--hair)">' +
+        '<button class="btn btn-sm btn-block" data-addenr>＋ Another sport or batch</button></div>';
+    wire();
+  }
+
+  function enrollment(e) {
+    var c = ref.centreById[e.centre_id] || {};
+    var b = ref.batchById[e.batch_id] || {};
+    var st = App.feeState(e.renewal_on);
+    var off = e.status !== "active";
+
+    return '<div class="enr" data-e="' + e.id + '"' + (off ? ' style="opacity:.55"' : "") + ">" +
+      '<div class="enr-top"><div class="row-main">' +
+        '<div class="row-t">' + App.esc(App.cap(e.sport || "Coaching")) + " at " +
+          App.esc(c.short_name || "unknown centre") + "</div>" +
+        '<div class="row-s">' + App.esc(b.name ? b.name + " · " + App.days(b.days) + " · " +
+          App.timeOf(b.start_time) + " to " + App.timeOf(b.end_time) : "No batch assigned") + "</div>" +
+      "</div>" +
+      '<span class="status ' + (off ? "status-muted" : st.cls) + '">' +
+        App.esc(off ? App.cap(e.status) : st.label) + "</span></div>" +
+      '<dl class="kv">' +
+        "<dt>Fee</dt><dd class=\"money\" data-fee>…</dd>" +
+        "<dt>Plan</dt><dd>" + e.plan_months + (e.plan_months === 1 ? " month" : " months") +
+          (e.custom_amount != null ? ", custom rate" : "") + "</dd>" +
+        "<dt>Joined</dt><dd>" + App.esc(App.longDate(e.joined_on)) + "</dd>" +
+        "<dt>Renews</dt><dd>" + App.esc(e.renewal_on ? App.longDate(e.renewal_on) : "not set") + "</dd>" +
+      "</dl>" +
+      (off ? "" : '<div class="btn-row mt-2">' +
+        '<button class="btn btn-sm btn-primary" data-pay>Record payment</button>' +
+        '<button class="btn btn-sm" data-editenr>Edit</button></div>') +
+      "</div>";
+  }
+
+  function wire() {
+    App.$$("[data-e]").forEach(function (node) {
+      var eid = +node.dataset.e;
+      // Always ask the server what this enrollment owes. Never compute
+      // a fee in the client: it would eventually disagree with the
+      // number the parent gets on WhatsApp.
+      RS.feeFor(eid).then(function (f) {
+        var cell = App.$("[data-fee]", node);
+        if (!cell) return;
+        if (f && f.amount != null) {
+          cell.textContent = App.money(f.amount) + " · " + String(f.source).replace(/_/g, " ");
+        } else {
+          cell.textContent = "not set"; cell.style.color = "var(--overdue)";
+        }
+      }).catch(function () {});
+
+      var pay = App.$("[data-pay]", node);
+      if (pay) pay.addEventListener("click", function () { payFor(eid); });
+      var ed = App.$("[data-editenr]", node);
+      if (ed) ed.addEventListener("click", function () { editEnrollment(eid); });
+    });
+    App.$("[data-edit]").addEventListener("click", editStudent);
+    App.$("[data-wastatus]").addEventListener("click", waStatus);
+    App.$("[data-addenr]").addEventListener("click", function () { editEnrollment(null); });
+  }
+
+  function renderTimeline(rows) {
+    if (!rows || !rows.length) {
+      return App.empty(tlHost, "Nothing yet", "Payments and reminders will appear here.");
+    }
+    tlHost.innerHTML = '<div class="tl">' + rows.map(function (t) {
+      var cls = t.kind === "payment" ? "is-pay" : (t.kind === "reminder" ? "is-rem" : "");
+      var when = new Date(t.at).toLocaleString("en-IN", {
+        day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: true });
+      return '<div class="tl-i ' + cls + '"><div class="tl-t">' + App.esc(t.title) + "</div>" +
+        '<div class="tl-s">' + App.esc(when + (t.body ? " · " + t.body : "")) + "</div></div>";
+    }).join("") + "</div>";
+  }
+
+  function payFor(eid) {
+    var e = (m.enrollments || []).filter(function (x) { return x.id === eid; })[0];
+    RS.feeFor(eid).then(function (f) {
+      App.sheet({
+        title: "Record payment",
+        html:
+          '<div class="field"><label>Amount</label><input class="input" id="amt" type="number" ' +
+            'inputmode="numeric" value="' + (f && f.amount != null ? Math.round(f.amount) : "") + '"></div>' +
+          '<div class="field"><label>Months paid for</label><div class="chips" id="mon">' +
+            [1,3,6,12].map(function (n) {
+              return '<button class="chip" type="button" data-m="' + n + '" aria-pressed="' +
+                (n === e.plan_months) + '">' + n + (n === 1 ? " month" : " months") + "</button>"; }).join("") +
+          "</div></div>" +
+          '<div class="field"><label>Mode</label><div class="chips" id="mode">' +
+            ["UPI","Cash","Bank"].map(function (x, i) {
+              return '<button class="chip" type="button" data-v="' + x + '" aria-pressed="' +
+                (i === 0) + '">' + x + "</button>"; }).join("") + "</div></div>" +
+          '<div class="grid-2">' +
+            '<div class="field"><label>Date</label><input class="input" id="don" type="date" value="' +
+              App.isoDate() + '"></div>' +
+            '<div class="field"><label>Type</label><select class="select" id="kind">' +
+              '<option value="renewal">Renewal</option><option value="admission">Joining fee</option>' +
+            "</select></div></div>" +
+          '<div class="field"><label>Reference <span class="hint">optional</span></label>' +
+            '<input class="input" id="ref" placeholder="UTR or cheque number"></div>' +
+          '<label class="small" style="display:flex;gap:9px;align-items:center;margin-bottom:14px">' +
+            '<input type="checkbox" id="pend"> Claimed but not verified yet</label>' +
+          '<button class="btn btn-primary btn-block" id="save">Save payment</button>',
+        onMount: function (el) {
+          pick(el, "#mon", function (v) {
+            RS.feeFor(eid, +v).then(function (f2) {
+              if (f2 && f2.amount != null) App.$("#amt", el).value = Math.round(f2.amount);
+            }).catch(function () {});
+          });
+          pick(el, "#mode");
+          App.$("#save", el).addEventListener("click", function () {
+            var btn = this, amt = Number(App.$("#amt", el).value);
+            if (!amt || amt <= 0) { App.toast("Enter an amount.", "bad"); return; }
+            btn.disabled = true; btn.textContent = "Saving…";
+            RS.recordPayment({
+              enrollment: eid, amount: amt, months: +chosen(el, "#mon", "m"),
+              mode: chosen(el, "#mode", "v"), date: App.$("#don", el).value,
+              kind: App.$("#kind", el).value, ref: App.$("#ref", el).value.trim() || null,
+              status: App.$("#pend", el).checked ? "pending_verification" : "paid"
+            }).then(function () {
+              var pend = App.$("#pend", el).checked;
+              App.closeSheet();
+              App.toast(pend ? "Saved, awaiting verification" : "Payment recorded", "good");
+              return load();
+            }).catch(function (er) {
+              btn.disabled = false; btn.textContent = "Save payment";
+              App.toast(er.message || "Could not save.", "bad");
+            });
+          });
+        }
+      });
+    });
+  }
+
+  function pick(el, sel, after) {
+    App.$$(sel + " .chip", el).forEach(function (c) {
+      c.addEventListener("click", function () {
+        App.$$(sel + " .chip", el).forEach(function (x) { x.setAttribute("aria-pressed", "false"); });
+        c.setAttribute("aria-pressed", "true");
+        if (after) after(c.dataset.m || c.dataset.v);
+      });
+    });
+  }
+  function chosen(el, sel, attr) {
+    var on = App.$(sel + ' .chip[aria-pressed="true"]', el);
+    return on ? on.dataset[attr] : null;
+  }
+
+  function editStudent() {
+    App.sheet({
+      title: "Edit student",
+      html:
+        '<div class="field"><label>Student name</label><input class="input" id="n" value="' +
+          App.esc(m.name) + '"></div>' +
+        '<div class="grid-2">' +
+          '<div class="field"><label>Parent name</label><input class="input" id="pn" value="' +
+            App.esc(m.parent_name || "") + '"></div>' +
+          '<div class="field"><label>Parent WhatsApp</label><input class="input" id="pp" type="tel" ' +
+            'inputmode="numeric" maxlength="10" value="' +
+            App.esc(App.phone10(m.parent_phone || m.phone)) + '"></div>' +
+        "</div>" +
+        '<div class="grid-2">' +
+          '<div class="field"><label>School</label><input class="input" id="sc" value="' +
+            App.esc(m.school || "") + '"></div>' +
+          '<div class="field"><label>Date of birth</label><input class="input" id="db" type="date" value="' +
+            App.esc(m.dob || "") + '"></div>' +
+        "</div>" +
+        '<div class="field"><label>Notes</label><textarea class="textarea" id="no">' +
+          App.esc(m.notes || "") + "</textarea></div>" +
+        '<div class="field"><label>Status</label><select class="select" id="st">' +
+          ["active","discontinued"].map(function (s) { return '<option value="' + s + '"' +
+            (m.status === s ? " selected" : "") + ">" + App.cap(s) + "</option>"; }).join("") + "</select></div>" +
+        '<button class="btn btn-primary btn-block" id="save">Save</button>',
+      onMount: function (el) {
+        App.$("#save", el).addEventListener("click", function () {
+          var btn = this, phone = App.phone10(App.$("#pp", el).value);
+          if (phone && phone.length !== 10) { App.toast("Parent number must be 10 digits.", "bad"); return; }
+          btn.disabled = true; btn.textContent = "Saving…";
+          RS.saveStudent(m.id, {
+            name: App.$("#n", el).value.trim() || m.name,
+            parent_name: App.$("#pn", el).value.trim() || null,
+            parent_phone: phone || null,
+            school: App.$("#sc", el).value.trim() || null,
+            dob: App.$("#db", el).value || null,
+            notes: App.$("#no", el).value.trim() || null,
+            status: App.$("#st", el).value
+          }).then(function () { App.closeSheet(); App.toast("Saved", "good"); return load(); })
+            .catch(function (e) { btn.disabled = false; btn.textContent = "Save"; App.toast(e.message, "bad"); });
+        });
+      }
+    });
+  }
+
+  function editEnrollment(eid) {
+    var e = eid ? (m.enrollments || []).filter(function (x) { return x.id === eid; })[0] : null;
+    var batchOpts = ref.batches.filter(function (b) { return b.active; }).map(function (b) {
+      var c = ref.centreById[b.centre_id] || {};
+      return '<option value="' + b.id + '"' + (e && e.batch_id === b.id ? " selected" : "") + ">" +
+        App.esc((c.short_name || "") + " · " + b.name + " · " + App.days(b.days) + " " +
+        App.timeOf(b.start_time)) + "</option>";
+    }).join("");
+
+    App.sheet({
+      title: eid ? "Edit enrollment" : "Add a sport or batch",
+      html:
+        '<div class="field"><label>Batch</label><select class="select" id="b">' +
+          '<option value="">Choose a batch</option>' + batchOpts + "</select></div>" +
+        '<div class="field"><label>Sport</label><select class="select" id="sp"><option value="">Not set</option>' +
+          ref.sports.filter(function (s) { return s.active; }).map(function (s) {
+            return '<option value="' + App.esc(s.code) + '"' + (e && e.sport === s.code ? " selected" : "") +
+            ">" + App.esc((s.icon ? s.icon + " " : "") + s.name) + "</option>"; }).join("") + "</select></div>" +
+        '<div class="grid-2">' +
+          '<div class="field"><label>Plan</label><select class="select" id="pm">' +
+            [1,3,6,12].map(function (n) { return '<option value="' + n + '"' +
+              (e && e.plan_months === n ? " selected" : "") + ">" + n +
+              (n === 1 ? " month" : " months") + "</option>"; }).join("") + "</select></div>" +
+          '<div class="field"><label>Renews on</label><input class="input" id="rn" type="date" value="' +
+            App.esc(e && e.renewal_on ? e.renewal_on : "") + '"></div>' +
+        "</div>" +
+        '<div class="field"><label>Custom monthly fee <span class="hint">overrides every rate</span></label>' +
+          '<input class="input" id="cf" type="number" inputmode="numeric" value="' +
+            (e && e.custom_amount != null ? e.custom_amount : "") + '" placeholder="Blank uses the set rate"></div>' +
+        (eid ? '<div class="field"><label>Status</label><select class="select" id="st">' +
+          ["active","paused","discontinued"].map(function (s) { return '<option value="' + s + '"' +
+            (e.status === s ? " selected" : "") + ">" + App.cap(s) + "</option>"; }).join("") + "</select></div>" : "") +
+        '<button class="btn btn-primary btn-block" id="save">Save</button>',
+      onMount: function (el) {
+        App.$("#b", el).addEventListener("change", function () {
+          var b = ref.batchById[+this.value];
+          if (b && b.sport) App.$("#sp", el).value = b.sport;
+        });
+        App.$("#save", el).addEventListener("click", function () {
+          var btn = this, bid = +App.$("#b", el).value;
+          if (!bid) { App.toast("Choose a batch.", "bad"); return; }
+          var b = ref.batchById[bid];
+          var months = +App.$("#pm", el).value;
+          var renew = App.$("#rn", el).value;
+          if (!renew) { var d = new Date(); d.setMonth(d.getMonth() + months); renew = App.isoDate(d); }
+          var cfv = App.$("#cf", el).value;
+          btn.disabled = true; btn.textContent = "Saving…";
+          RS.saveEnrollment(eid, {
+            member_id: m.id, centre_id: b.centre_id, batch_id: b.id,
+            sport: App.$("#sp", el).value || b.sport || null,
+            plan_months: months, renewal_on: renew,
+            custom_amount: cfv === "" ? null : Number(cfv),
+            status: eid ? App.$("#st", el).value : "active",
+            joined_on: (e && e.joined_on) || App.isoDate()
+          }).then(function () { App.closeSheet(); App.toast("Saved", "good"); return load(); })
+            .catch(function (er) { btn.disabled = false; btn.textContent = "Save"; App.toast(er.message, "bad"); });
+        });
+      }
+    });
+  }
+
+  /* Marking a number wrong is what stops the engine burning retries,
+     and the parent's patience, on a dead number. */
+  function waStatus() {
+    App.sheet({
+      title: "WhatsApp status",
+      html:
+        '<p class="muted small">This decides whether automatic reminders reach this parent.</p>' +
+        opt("active", "Active", "Reminders send normally.") +
+        opt("wrong_number", "Wrong number", "Pauses every send and retry until the number is fixed.") +
+        opt("opted_out", "Opted out", "The parent asked not to be messaged. Call them instead."),
+      onMount: function (el) {
+        App.$$("[data-s]", el).forEach(function (b) {
+          b.addEventListener("click", function () {
+            RS.setWhatsappStatus(m.id, b.dataset.s).then(function () {
+              App.closeSheet(); App.toast("Updated", "good"); return load();
+            }).catch(function (e) { App.toast(e.message, "bad"); });
+          });
+        });
+      }
+    });
+    function opt(v, t, s) {
+      return '<button class="opt-row' + (m.whatsapp_status === v ? " is-on" : "") + '" data-s="' + v + '">' +
+        "<b>" + App.esc(t) + (m.whatsapp_status === v ? "  ✓" : "") + "</b>" +
+        "<span>" + App.esc(s) + "</span></button>";
+    }
+  }
+})();
+</script>
+</body>
+</html>

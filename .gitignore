@@ -1,0 +1,7 @@
+.DS_Store
+.migrate-backups/
+node_modules/
+# The Android app lives in its own repo (see README).
+android-app/
+# Third-party design skills are installed locally, not vendored here.
+.claude/skills/

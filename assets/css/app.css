@@ -1,0 +1,700 @@
+/* ============================================================
+   RAJ SPORTS — "GROUNDS"
+   Warm paper, deep evergreen, quiet ink. Light by default, because
+   this app is used outdoors in daylight far more than at night.
+
+   THREE RULES THAT HOLD IT TOGETHER
+   1. THE ACCENT IS FOR ACTION ONLY. Evergreen never appears in a list
+      row and never states a fact. If something is green, you can press
+      it or it is where you are.
+   2. PAID IS QUIET. A student who has paid needs no attention, so
+      "paid" is neutral grey. Colour is spent only on what needs doing,
+      which leaves ochre and brick owning the eye by themselves.
+   3. ONE RADIUS SYSTEM. Pills for anything pressable, 14px for
+      surfaces, 10px for inputs and chips.
+
+   Twin file: android-app/.../ui/Theme.kt. Change one, change both.
+   ============================================================ */
+
+/* ---------------- tokens (light is the default) ---------------- */
+:root {
+  color-scheme: light;
+
+  /* Warm paper, not white. Pure white is glare on a phone at a ground. */
+  --void:    #f6f5f1;
+  --surface: #ffffff;
+  --raised:  #fbfaf7;
+  --sunken:  #efeee8;
+  --hair:    rgba(26, 24, 18, 0.10);
+  --hair-2:  rgba(26, 24, 18, 0.17);
+
+  --text:   #17191a;
+  --text-2: #5a615f;
+  --text-3: #8b918e;
+
+  /* The accent: deep evergreen. Confident without shouting, and it
+     carries white text at 8.9:1 so a filled button is always legible. */
+  --volt:      #14543e;
+  --volt-deep: #0e3d2d;
+  --on-volt:   #ffffff;
+  --volt-haze: rgba(20, 84, 62, 0.09);
+
+  /* Money states. Paid is neutral on purpose: it needs no alarm. */
+  --paid:         #7a827e;
+  --paid-haze:    rgba(122, 130, 126, 0.13);
+  --due:          #a9701a;
+  --due-haze:     rgba(169, 112, 26, 0.12);
+  --overdue:      #a93226;
+  --overdue-haze: rgba(169, 50, 38, 0.10);
+  --wa:           #1f9d55;
+
+  /* radius, the locked system */
+  --r-chip:  10px;
+  --r-card:  14px;
+  --r-sheet: 24px;
+  --r-pill:  999px;
+
+  /* motion. A real spring via CSS linear(), so a press reads as
+     physical rather than animated. */
+  --ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --spring: linear(
+    0, 0.006, 0.025, 0.101, 0.539, 0.826, 0.947, 1.001,
+    1.029, 1.034, 1.024, 1.012, 1.004, 1.001, 1
+  );
+  --drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --tap: 46px;
+  --nav-h: 60px;
+  --page: 1120px;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --void:    #14150f;
+  --surface: #1c1e18;
+  --raised:  #23261f;
+  --sunken:  #101208;
+  --hair:    rgba(255, 255, 255, 0.08);
+  --hair-2:  rgba(255, 255, 255, 0.15);
+
+  --text:   #f0f1ea;
+  --text-2: #a3a89e;
+  --text-3: #767b72;
+
+  --volt:      #4aa07a;
+  --volt-deep: #3d8967;
+  --on-volt:   #06170f;
+  --volt-haze: rgba(74, 160, 122, 0.14);
+
+  --paid:         #8b938e;
+  --paid-haze:    rgba(139, 147, 142, 0.14);
+  --due:          #d9a04a;
+  --due-haze:     rgba(217, 160, 74, 0.14);
+  --overdue:      #e0685c;
+  --overdue-haze: rgba(224, 104, 92, 0.14);
+}
+
+/* ---------------- base ---------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--void);
+  color: var(--text);
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+               Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
+  overflow-x: hidden;
+}
+
+/* A very soft warmth at the top of the page. Enough to stop the canvas
+   reading as flat #fff, not enough to notice. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -10% -10% auto -10%;
+  height: 46vh;
+  z-index: -2;
+  pointer-events: none;
+  background: radial-gradient(52% 42% at 50% 0%, var(--volt-haze) 0%, transparent 70%);
+}
+
+/* Grain. Kills the flat-vector look that makes an interface read as
+   generated. Fixed + pointer-events:none so it never repaints while
+   scrolling (a grain layer on a scrolling container destroys FPS). */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+  opacity: 0.22;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.42'/%3E%3C/svg%3E");
+}
+[data-theme="dark"] body::after { opacity: 0.34; mix-blend-mode: overlay; }
+
+h1, h2, h3 { margin: 0; font-weight: 620; letter-spacing: -0.022em; line-height: 1.18; }
+h1 { font-size: 25px; }
+h2 { font-size: 17px; }
+p  { margin: 0 0 10px; }
+a  { color: inherit; text-decoration: none; }
+
+/* Numbers are the product here. Tabular so they never jitter as they
+   change, tight so they read as engineered rather than typed. */
+.num, .money, .metric-v, .amount, td.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "ss01" 1;
+  letter-spacing: -0.03em;
+}
+
+.wrap { max-width: var(--page); margin: 0 auto; padding: 0 16px; }
+.section { margin: 22px 0; }
+.stack { display: grid; gap: 12px; }
+
+/* The one micro-label style. Used for metric captions only, never as
+   decoration above every heading. */
+.eyebrow {
+  font-size: 10.5px;
+  font-weight: 680;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* ---------------- brand mark ---------------- */
+/* The stride: four sheared bars climbing. Motion, progress, and the
+   several places he coaches, in a shape that still reads at 16px. */
+.mark { display: block; width: 30px; height: 30px; flex: none; }
+.mark rect { fill: var(--volt); }
+
+.wordmark {
+  display: flex; flex-direction: column; line-height: 1; gap: 2px;
+}
+.wordmark b {
+  font-size: 15px; font-weight: 760; letter-spacing: -0.02em; color: var(--text);
+}
+.wordmark span {
+  font-size: 8.5px; font-weight: 620; letter-spacing: 0.26em;
+  text-transform: uppercase; color: var(--text-3);
+}
+
+/* ---------------- top bar ---------------- */
+.topbar {
+  position: sticky; top: 0; z-index: 40;
+  padding-top: env(safe-area-inset-top, 0px);
+  background: color-mix(in srgb, var(--void) 72%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  backdrop-filter: blur(18px) saturate(1.3);
+  border-bottom: 1px solid var(--hair);
+}
+.topbar-in {
+  max-width: var(--page); margin: 0 auto; height: 58px; padding: 0 16px;
+  display: flex; align-items: center; gap: 11px;
+}
+.topbar h1 {
+  font-size: 17px; flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.icon-btn {
+  width: 36px; height: 36px; flex: none;
+  display: grid; place-items: center;
+  border-radius: var(--r-pill); border: 1px solid var(--hair);
+  background: var(--raised); color: var(--text-2);
+  cursor: pointer; font-size: 14px;
+  transition: transform 140ms var(--spring), color 160ms var(--ease),
+              border-color 160ms var(--ease);
+}
+.icon-btn:active { transform: scale(0.9); }
+@media (hover: hover) { .icon-btn:hover { color: var(--text); border-color: var(--hair-2); } }
+
+/* ---------------- bottom nav ----------------
+   The volt indicator is ONE element that slides between tabs on a
+   spring. Five separate highlights that fade in and out would read as
+   five things blinking; one thing that moves reads as your position. */
+.nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: color-mix(in srgb, var(--void) 78%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  backdrop-filter: blur(22px) saturate(1.4);
+  border-top: 1px solid var(--hair);
+}
+.nav-in {
+  position: relative;
+  max-width: 520px; margin: 0 auto; height: var(--nav-h);
+  display: grid; grid-template-columns: repeat(5, 1fr);
+}
+.nav-pill {
+  position: absolute; top: 9px; height: calc(var(--nav-h) - 18px);
+  border-radius: var(--r-pill);
+  background: var(--volt);
+  transition: transform 520ms var(--spring), width 520ms var(--spring);
+  will-change: transform;
+  pointer-events: none;
+}
+.nav a {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; color: var(--text-3);
+  font-size: 10px; font-weight: 640; letter-spacing: 0.02em;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 280ms var(--ease), transform 160ms var(--spring);
+}
+.nav a svg { width: 20px; height: 20px; }
+.nav a:active { transform: scale(0.92); }
+.nav a[aria-current="page"] { color: var(--on-volt); }
+
+.nav .badge {
+  position: absolute; transform: translate(13px, -13px);
+  min-width: 17px; height: 17px; padding: 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--overdue); color: #fff;
+  font-size: 10px; font-weight: 760; line-height: 17px; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.nav a[aria-current="page"] .badge {
+  background: var(--on-volt); color: var(--volt);
+}
+
+/* ---------------- surfaces ----------------
+   Cards only where elevation means something. Elsewhere, hairlines. */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-card);
+  overflow: hidden;
+}
+.card-pad { padding: 16px; }
+.card-hd {
+  display: flex; align-items: center; gap: 10px;
+  padding: 15px 16px; border-bottom: 1px solid var(--hair);
+}
+.card-hd h2 { flex: 1; }
+
+/* ---------------- the lead card ----------------
+   One thing to do, stated at a size you cannot scroll past. */
+.lead {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; gap: 16px;
+  padding: 20px 18px;
+  border-radius: var(--r-card);
+  background: var(--volt); color: var(--on-volt);
+  box-shadow: 0 14px 34px -20px rgba(20, 84, 62, 0.55);
+  transition: transform 200ms var(--spring);
+}
+.lead:active { transform: scale(0.985); }
+.lead.is-clear { background: var(--raised); color: var(--text); border: 1px solid var(--hair); box-shadow: none; }
+.lead.is-wait  { background: var(--raised); color: var(--text-2); border: 1px solid var(--hair); box-shadow: none; }
+.lead-n {
+  font-size: 46px; font-weight: 700; line-height: 0.86; letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+}
+.lead-t { font-size: 16px; font-weight: 660; letter-spacing: -0.015em; }
+.lead-s { font-size: 12.5px; opacity: 0.72; }
+.lead-go { margin-left: auto; font-size: 19px; opacity: 0.5; }
+
+/* No looping sweep. A card that shimmers forever is a card you learn to
+   ignore, and on a screen someone opens twenty times a day that is the
+   opposite of what the lead card is for. */
+
+/* ---------------- metrics ----------------
+   No boxes. Hairlines and space. Boxes around four numbers is the
+   dashboard reflex that makes every admin panel look the same. */
+.metrics {
+  display: grid; grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--hair); border-radius: var(--r-card);
+  overflow: hidden; background: var(--surface);
+}
+.metric {
+  padding: 15px 16px 14px;
+  border-right: 1px solid var(--hair);
+  border-bottom: 1px solid var(--hair);
+}
+.metric:nth-child(2n) { border-right: 0; }
+.metric:nth-last-child(-n+2) { border-bottom: 0; }
+@media (min-width: 720px) {
+  .metrics { grid-template-columns: repeat(4, 1fr); }
+  .metric { border-bottom: 0; }
+  .metric:nth-child(2n) { border-right: 1px solid var(--hair); }
+  .metric:last-child { border-right: 0; }
+}
+.metric-v {
+  font-size: 27px; font-weight: 660; margin-top: 5px; line-height: 1.05;
+}
+.metric-s { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
+.metric.is-overdue .metric-v { color: var(--overdue); }
+.metric.is-due     .metric-v { color: var(--due); }
+.metric.is-paid    .metric-v { color: var(--text); }
+
+/* ---------------- buttons ---------------- */
+.btn {
+  position: relative; overflow: hidden;
+  appearance: none; cursor: pointer;
+  border: 1px solid var(--hair-2); background: var(--raised); color: var(--text);
+  border-radius: var(--r-pill); padding: 0 16px; min-height: var(--tap);
+  font: inherit; font-weight: 640; font-size: 14px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 150ms var(--spring), background-color 180ms var(--ease),
+              border-color 180ms var(--ease), opacity 180ms var(--ease);
+}
+.btn:active { transform: scale(0.965); }
+.btn:disabled { opacity: 0.38; cursor: not-allowed; transform: none; }
+
+.btn-primary { background: var(--volt); border-color: var(--volt); color: var(--on-volt); }
+/* The send button is volt like every other primary action, not
+   WhatsApp green. Two saturated greens on one screen is two accents,
+   and the eye stops knowing which one means "press me". The green
+   survives where it is unmistakable and momentary: behind a swipe. */
+.btn-wa      { background: var(--volt); border-color: var(--volt); color: var(--on-volt); }
+.btn-wa svg  { width: 16px; height: 16px; }
+.btn-danger  { background: var(--overdue); border-color: var(--overdue); color: #fff; }
+.btn-ghost   { background: transparent; border-color: transparent; color: var(--text-2); }
+.btn-sm      { min-height: 36px; padding: 0 13px; font-size: 13px; }
+.btn-block   { width: 100%; }
+.btn-row     { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* The press scale is the feedback. A light sweep on top of it was one
+   effect too many on a filled button this dark. */
+
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover:not(:disabled) { border-color: var(--hair-2); background: var(--sunken); }
+  .btn-primary:hover:not(:disabled) { background: var(--volt-deep); border-color: var(--volt-deep); }
+  .btn-ghost:hover { color: var(--text); background: transparent; }
+}
+
+.fab {
+  position: fixed; right: 16px; z-index: 45;
+  bottom: calc(var(--nav-h) + 16px + env(safe-area-inset-bottom, 0px));
+  height: 52px; padding: 0 20px; border: 0; border-radius: var(--r-pill);
+  background: var(--volt); color: var(--on-volt);
+  font: inherit; font-weight: 680; font-size: 14px; cursor: pointer;
+  box-shadow: 0 10px 26px -12px rgba(20, 84, 62, 0.5);
+  display: inline-flex; align-items: center; gap: 7px;
+  transition: transform 180ms var(--spring);
+}
+.fab:active { transform: scale(0.93); }
+
+/* ---------------- status ----------------
+   A dot plus coloured text, never a filled pill in a list. Pills in
+   dense rows turn a roster into confetti and stop meaning anything. */
+.status { display: inline-flex; align-items: center; gap: 6px; font-weight: 620; font-size: 13px; }
+.status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.status-paid    { color: var(--paid); }
+.status-due     { color: var(--due); }
+.status-overdue { color: var(--overdue); }
+.status-muted   { color: var(--text-3); }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: var(--r-pill);
+  font-size: 11px; font-weight: 680; letter-spacing: 0.01em;
+  background: var(--raised); color: var(--text-2); border: 1px solid var(--hair);
+}
+.pill-paid    { background: var(--paid-haze);    color: var(--paid);    border-color: transparent; }
+.pill-due     { background: var(--due-haze);     color: var(--due);     border-color: transparent; }
+.pill-overdue { background: var(--overdue-haze); color: var(--overdue); border-color: transparent; }
+.pill-volt    { background: var(--volt-haze);    color: var(--volt);    border-color: transparent; }
+[data-theme="light"] .pill-volt { color: var(--volt-deep); }
+
+/* ---------------- rows ---------------- */
+.list { display: grid; }
+.row {
+  position: relative;
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 16px; border-bottom: 1px solid var(--hair);
+  background: var(--surface); color: inherit;
+  transition: background-color 160ms var(--ease);
+}
+.row:last-child { border-bottom: 0; }
+.row:active { background: var(--raised); }
+@media (hover: hover) and (pointer: fine) { .row:hover { background: var(--raised); } }
+.row-main { flex: 1; min-width: 0; }
+.row-t { font-weight: 620; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-s { font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-end { text-align: right; flex: none; }
+
+.avatar {
+  width: 38px; height: 38px; border-radius: var(--r-chip); flex: none;
+  display: grid; place-items: center; font-weight: 680; font-size: 13px;
+  background: var(--raised); color: var(--text-2);
+  border: 1px solid var(--hair);
+  font-variant-numeric: tabular-nums;
+}
+.row:hover .avatar { border-color: var(--hair-2); }
+
+/* ---------------- swipe to send ----------------
+   The queue is the daily grind: ten parents, one thumb. Dragging a
+   row right past the threshold opens WhatsApp, so the manager can
+   clear the list without ever lifting to aim at a button. The button
+   stays for anyone who prefers it. */
+.swipe { position: relative; overflow: hidden; background: var(--wa); }
+.swipe-face {
+  position: relative; z-index: 1; background: var(--surface);
+  transition: transform 420ms var(--spring);
+  will-change: transform;
+}
+.swipe.is-dragging .swipe-face { transition: none; }
+.swipe-hint {
+  position: absolute; inset: 0; z-index: 0;
+  display: flex; align-items: center; gap: 8px;
+  padding-left: 22px; color: #04240f;
+  font-weight: 700; font-size: 13.5px; letter-spacing: 0.01em;
+}
+.swipe-hint svg { width: 17px; height: 17px; }
+
+/* ---------------- forms ---------------- */
+.field { display: grid; gap: 6px; margin-bottom: 14px; }
+.field > label { font-size: 12px; font-weight: 640; color: var(--text-2); }
+.field .hint { font-size: 11.5px; color: var(--text-3); font-weight: 400; }
+.input, .select, .textarea {
+  width: 100%; min-height: var(--tap);
+  padding: 11px 13px; font: inherit; font-size: 16px; /* 16px stops iOS zoom */
+  color: var(--text); background: var(--sunken);
+  border: 1px solid var(--hair-2); border-radius: var(--r-chip);
+  transition: border-color 170ms var(--ease), box-shadow 170ms var(--ease),
+              background-color 170ms var(--ease);
+}
+.textarea { min-height: 86px; resize: vertical; }
+.input::placeholder, .textarea::placeholder { color: var(--text-3); }
+.input:focus, .select:focus, .textarea:focus {
+  outline: none; border-color: var(--volt); background: var(--surface);
+  box-shadow: 0 0 0 3px var(--volt-haze);
+}
+.input:disabled, .select:disabled { opacity: 0.45; cursor: not-allowed; }
+.select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%235d666e' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 13px center; background-size: 11px;
+  padding-right: 36px;
+}
+.grid-2 { display: grid; gap: 0 12px; grid-template-columns: 1fr; }
+@media (min-width: 560px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
+
+.chips { display: flex; gap: 7px; flex-wrap: wrap; }
+.chip {
+  padding: 9px 14px; border-radius: var(--r-pill); cursor: pointer;
+  border: 1px solid var(--hair-2); background: var(--sunken); color: var(--text-2);
+  font-size: 13.5px; font-weight: 640;
+  transition: transform 150ms var(--spring), background-color 180ms var(--ease),
+              border-color 180ms var(--ease), color 180ms var(--ease);
+}
+.chip:active { transform: scale(0.94); }
+.chip[aria-pressed="true"] {
+  background: var(--volt); border-color: var(--volt); color: var(--on-volt);
+}
+
+/* ---------------- rails ----------------
+   A one-line horizontally scrolling row of choices. Five centres, five
+   sports and five batches used to be fifteen full-width cards and a lot
+   of scrolling inside a sheet; as rails the same choice is three lines
+   and the whole decision stays on screen at once. */
+.rail {
+  display: flex; gap: 7px; overflow-x: auto;
+  padding: 2px 0 6px; margin: 0 -2px;
+  scrollbar-width: none; scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+.rail::-webkit-scrollbar { display: none; }
+.rail .chip { flex: none; scroll-snap-align: start; }
+.rail .chip small {
+  display: block; font-size: 10.5px; font-weight: 500;
+  opacity: 0.62; margin-top: 1px;
+}
+.rail-k {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 640; color: var(--text-2); margin-bottom: 8px;
+}
+.rail-n {
+  width: 17px; height: 17px; border-radius: 50%; flex: none;
+  display: grid; place-items: center;
+  background: var(--sunken); color: var(--text-3);
+  font-size: 9.5px; font-weight: 720;
+  transition: background-color 200ms var(--ease), color 200ms var(--ease);
+}
+.rail-step.is-done .rail-n { background: var(--volt); color: var(--on-volt); }
+.rail-step { margin-bottom: 15px; }
+.rail-step[hidden] { display: none; }
+
+/* The running answer, so the manager can see what they have chosen and
+   what it will cost without scrolling back up. */
+.summary {
+  display: grid; gap: 3px;
+  padding: 13px 14px; border-radius: var(--r-chip); margin-bottom: 15px;
+  background: var(--volt-haze);
+  font-size: 12.5px; line-height: 1.5; color: var(--text-2);
+}
+.summary b { color: var(--text); font-weight: 660; }
+.summary .money { font-size: 17px; font-weight: 700; color: var(--text); }
+
+.filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.filters .select, .filters .input { min-height: 40px; font-size: 14px; width: auto; min-width: 132px; }
+.filters .search { flex: 1; min-width: 160px; }
+
+/* ---------------- tabs ----------------
+   Same idea as the nav: one indicator that travels, not several that
+   blink. Here it is a hairline under the label. */
+.tabs {
+  position: relative; display: flex; gap: 4px;
+  border-bottom: 1px solid var(--hair);
+  margin-bottom: 16px; overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button {
+  appearance: none; border: 0; cursor: pointer; background: transparent;
+  color: var(--text-3); padding: 11px 12px 13px;
+  font: inherit; font-size: 13.5px; font-weight: 640; white-space: nowrap;
+  transition: color 220ms var(--ease);
+}
+.tabs button[aria-selected="true"] { color: var(--text); }
+.tab-ink {
+  position: absolute; bottom: -1px; height: 2px; border-radius: 2px;
+  background: var(--volt);
+  transition: transform 480ms var(--spring), width 480ms var(--spring);
+  will-change: transform;
+}
+
+/* ---------------- sheet ---------------- */
+.scrim {
+  position: fixed; inset: 0; z-index: 95;
+  background: rgba(20, 18, 12, 0.34);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  opacity: 0; pointer-events: none;
+  transition: opacity 300ms var(--ease);
+}
+.scrim[data-open] { opacity: 1; pointer-events: auto; }
+
+.sheet {
+  position: fixed; z-index: 100; left: 0; right: 0; bottom: 0;
+  max-height: 90vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  background: var(--surface);
+  border: 1px solid var(--hair); border-bottom: 0;
+  border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+  box-shadow: 0 -24px 60px -24px rgba(20, 18, 12, 0.28);
+  padding: 10px 16px calc(22px + env(safe-area-inset-bottom, 0px));
+  /* translateY(100%) is the sheet's own height, so this works at any
+     content size without a magic number */
+  transform: translateY(100%);
+  transition: transform 480ms var(--drawer);
+  will-change: transform;
+}
+.sheet[data-open] { transform: translateY(0); }
+.sheet.is-dragging { transition: none; }
+.sheet-grip {
+  width: 40px; height: 4px; border-radius: 2px; background: var(--hair-2);
+  margin: 4px auto 14px; cursor: grab;
+}
+.sheet h2 { margin-bottom: 14px; font-size: 19px; }
+@media (min-width: 700px) {
+  .sheet {
+    left: 50%; right: auto; bottom: auto; top: 50%;
+    width: min(540px, calc(100vw - 40px));
+    border-radius: var(--r-card); border-bottom: 1px solid var(--hair);
+    /* a modal is not anchored to a trigger, so it scales from centre */
+    transform: translate(-50%, -48%) scale(0.97); opacity: 0;
+    transition: transform 300ms var(--spring), opacity 220ms var(--ease);
+  }
+  .sheet[data-open] { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  .sheet-grip { display: none; }
+}
+
+/* ---------------- toast ---------------- */
+.toasts {
+  position: fixed; z-index: 120; left: 12px; right: 12px;
+  bottom: calc(var(--nav-h) + 14px + env(safe-area-inset-bottom, 0px));
+  display: grid; gap: 8px; pointer-events: none;
+}
+@media (min-width: 700px) { .toasts { left: auto; right: 20px; width: 350px; bottom: 20px; } }
+.toast {
+  border-radius: var(--r-pill); padding: 13px 18px;
+  font-size: 13.5px; font-weight: 620;
+  background: var(--text); color: var(--void);
+  box-shadow: 0 14px 32px -14px rgba(20, 18, 12, 0.4);
+  /* transitions, not keyframes: toasts stack fast and must retarget */
+  opacity: 1; transform: translateY(0) scale(1);
+  transition: opacity 340ms var(--ease), transform 340ms var(--spring);
+}
+.toast[data-leaving] { opacity: 0; transform: translateY(10px) scale(0.97); }
+@starting-style { .toast { opacity: 0; transform: translateY(14px) scale(0.94); } }
+.toast-bad  { background: var(--overdue); color: #fff; }
+.toast-good { background: var(--volt); color: var(--on-volt); }
+
+/* ---------------- empty / loading ---------------- */
+.empty { padding: 40px 22px; text-align: center; }
+.empty-t { font-weight: 640; color: var(--text-2); margin-bottom: 5px; font-size: 14.5px; }
+.empty .small { color: var(--text-3); }
+
+.skeleton {
+  background: linear-gradient(100deg,
+    var(--raised) 30%, var(--hair) 48%, var(--raised) 66%);
+  background-size: 300% 100%;
+  animation: shimmer 1.25s linear infinite;
+  border-radius: var(--r-chip);
+}
+@keyframes shimmer { to { background-position: -180% 0; } }
+.skeleton-row { height: 62px; margin: 0 0 1px; border-radius: 0; }
+
+/* ---------------- entrance ----------------
+   Rise with a blur burn-off. The blur is doing real work: it hides
+   the half-rendered frames of a crossfade, so the arrival reads as
+   one object focusing rather than two states overlapping. */
+.reveal {
+  opacity: 0; transform: translateY(14px); filter: blur(7px);
+  animation: arrive 620ms var(--ease) forwards;
+}
+.reveal:nth-child(1) { animation-delay: 0ms; }
+.reveal:nth-child(2) { animation-delay: 55ms; }
+.reveal:nth-child(3) { animation-delay: 110ms; }
+.reveal:nth-child(4) { animation-delay: 160ms; }
+.reveal:nth-child(n+5) { animation-delay: 200ms; }
+@keyframes arrive {
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+/* Rows arrive on a tighter stagger. Long delays read as lag. */
+.row-in { opacity: 0; transform: translateY(9px); animation: arrive 460ms var(--ease) forwards; }
+
+/* ---------------- bars ---------------- */
+.bar { display: grid; gap: 9px; }
+.bar-row { display: grid; grid-template-columns: 84px 1fr auto; gap: 11px; align-items: center; font-size: 12.5px; }
+.bar-track { height: 5px; border-radius: 3px; background: var(--sunken); overflow: hidden; }
+.bar-fill {
+  height: 100%; border-radius: 3px; background: var(--volt);
+  transform-origin: left; transform: scaleX(0);
+  animation: grow 900ms var(--spring) forwards;
+}
+@keyframes grow { to { transform: scaleX(1); } }
+
+/* ---------------- utility ---------------- */
+.muted { color: var(--text-3); }
+.small { font-size: 12.5px; }
+.nowrap { white-space: nowrap; }
+.hide { display: none !important; }
+.mt-1 { margin-top: 8px; } .mt-2 { margin-top: 16px; }
+.mb-1 { margin-bottom: 8px; } .mb-2 { margin-bottom: 16px; }
+@media (min-width: 700px) { .only-phone { display: none !important; } }
+@media (max-width: 699px)  { .only-wide  { display: none !important; } }
+
+/* ---------------- reduced motion ----------------
+   Fewer and gentler, not zero. Opacity still helps comprehension;
+   movement, blur and the looping sweep are what cause trouble. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 130ms !important;
+  }
+  .reveal, .row-in { transform: none; filter: none; }
+  .lead::after { display: none; }
+  .bar-fill { transform: scaleX(1); }
+  .nav-pill, .tab-ink { transition-duration: 130ms !important; }
+}

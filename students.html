@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f6f5f1">
+<title>Students · Raj Sports</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="assets/css/app.css?v=2">
+<style>
+  .count { font-size: 12px; color: var(--text-3); margin-bottom: 9px; }
+</style>
+</head>
+<body>
+  <header class="topbar"></header>
+
+  <main class="wrap">
+    <div class="filters" style="margin-top:16px">
+      <input class="input search" id="q" type="search" placeholder="Search name or phone"
+             autocapitalize="off" spellcheck="false">
+      <select class="select" id="fCentre"><option value="">All centres</option></select>
+      <select class="select" id="fState">
+        <option value="">Everyone</option>
+        <option value="overdue">Overdue</option>
+        <option value="due">Due now</option>
+        <option value="paid">Paid up</option>
+        <option value="inactive">Discontinued</option>
+      </select>
+    </div>
+
+    <div class="count" id="count"></div>
+    <div class="card"><div id="list"></div></div>
+  </main>
+
+  <button class="fab" id="add">＋ Student</button>
+  <nav class="nav"></nav>
+
+<script src="assets/js/cloud.js?v=2"></script>
+<script src="assets/js/core.js?v=2"></script>
+<script>
+(function () {
+  if (!App.requireStaff()) return;
+  App.shell("students", "Students");
+  RS.track("page_view");
+
+  var list = App.$("#list"), all = [], ref = null;
+  App.skeleton(list, 6);
+
+  var pre = new URLSearchParams(location.search).get("filter");
+  if (pre) App.$("#fState").value = pre;
+
+  Promise.all([RS.reference(), RS.students()]).then(function (r) {
+    ref = r[0]; all = r[1] || [];
+    App.$("#fCentre").innerHTML = '<option value="">All centres</option>' +
+      ref.centres.filter(function (c) { return c.active; }).map(function (c) {
+        return '<option value="' + c.id + '">' + App.esc(c.short_name || c.name) + "</option>"; }).join("");
+    render();
+  }).catch(function (e) { App.fail(list, e); });
+
+  ["q", "fCentre", "fState"].forEach(function (id) {
+    App.$("#" + id).addEventListener("input", render);
+    App.$("#" + id).addEventListener("change", render);
+  });
+
+  function matches(m) {
+    var q = App.$("#q").value.trim().toLowerCase();
+    if (q) {
+      var hay = (m.name + " " + (m.parent_name || "") + " " +
+                 (m.parent_phone || "") + " " + (m.phone || "")).toLowerCase();
+      if (hay.indexOf(q) < 0) return false;
+    }
+    var centre = App.$("#fCentre").value, state = App.$("#fState").value;
+    var ens = m.enrollments || [];
+
+    if (state === "inactive") {
+      return m.status === "discontinued" ||
+             (ens.length && ens.every(function (e) { return e.status !== "active"; }));
+    }
+    if (m.status === "discontinued") return false;
+    var live = ens.filter(function (e) { return e.status === "active"; });
+    if (centre && !live.some(function (e) { return String(e.centre_id) === centre; })) return false;
+    if (state) {
+      var keys = live.map(function (e) { return App.feeState(e.renewal_on).key; });
+      if (state === "overdue" && keys.indexOf("overdue") < 0) return false;
+      if (state === "due" && keys.indexOf("due") < 0 && keys.indexOf("soon") < 0) return false;
+      if (state === "paid" && (!keys.length ||
+          keys.some(function (k) { return k === "overdue" || k === "due"; }))) return false;
+    }
+    return true;
+  }
+
+  /* A student's headline state is their WORST enrollment: if cricket is
+     paid but basketball is 12 days late, the roster must say late. */
+  function worst(m) {
+    var live = (m.enrollments || []).filter(function (e) { return e.status === "active"; });
+    if (!live.length) return { key: "none", label: "No active batch", cls: "status-muted", days: null };
+    var rank = { overdue: 4, due: 3, unset: 2, soon: 1, paid: 0 };
+    return live.map(function (e) { return App.feeState(e.renewal_on); })
+      .sort(function (a, b) { return (rank[b.key] || 0) - (rank[a.key] || 0); })[0];
+  }
+
+  function render() {
+    var rows = all.filter(matches);
+    App.$("#count").textContent = rows.length + (rows.length === 1 ? " student" : " students");
+    if (!rows.length) {
+      return App.empty(list, "No students match", "Try clearing a filter, or add a student.");
+    }
+    rows.sort(function (a, b) { return a.name.localeCompare(b.name); });
+    list.innerHTML = '<div class="list">' + rows.map(function (m, i) {
+      var st = worst(m);
+      var live = (m.enrollments || []).filter(function (e) { return e.status === "active"; });
+      var where = live.map(function (e) {
+        var c = ref.centreById[e.centre_id] || {};
+        return [c.short_name, e.sport ? App.cap(e.sport) : null].filter(Boolean).join(" ");
+      }).join(" · ");
+      return '<a class="row row-in" style="animation-delay:' + Math.min(i * 26, 300) +
+        'ms" href="student.html?id=' + m.id + '">' +
+        '<div class="avatar">' + App.esc(App.initials(m.name)) + "</div>" +
+        '<div class="row-main"><div class="row-t">' + App.esc(m.name) + "</div>" +
+        '<div class="row-s">' + App.esc(where || "Not assigned to a batch") + "</div></div>" +
+        '<div class="row-end"><span class="status ' + st.cls + '">' + App.esc(st.label) + "</span></div></a>";
+    }).join("") + "</div>";
+  }
+
+  /* ============================================================
+     ADD A STUDENT
+     Centre, then sport, then batch, as three one-line rails. Each rail
+     appears only once the one above it is answered, so the sheet never
+     asks the manager to find one batch among thirteen from five
+     different grounds.
+     ============================================================ */
+  App.$("#add").addEventListener("click", function () {
+    var pick = { centre: null, sport: null, batch: null, months: 1 };
+
+    App.sheet({
+      title: "New student",
+      html:
+        '<div class="field"><label>Student name</label>' +
+          '<input class="input" id="n" autocapitalize="words"></div>' +
+        '<div class="grid-2">' +
+          '<div class="field"><label>Parent name</label>' +
+            '<input class="input" id="pn" autocapitalize="words"></div>' +
+          '<div class="field"><label>Parent WhatsApp</label>' +
+            '<input class="input" id="pp" type="tel" inputmode="numeric" maxlength="10" ' +
+            'placeholder="10 digits"></div>' +
+        "</div>" +
+
+        step(1, "Centre", "centres") +
+        step(2, "Sport", "sports", true) +
+        step(3, "Batch", "batches", true) +
+
+        '<div class="rail-step" id="s4" hidden>' +
+          '<div class="rail-k"><span class="rail-n">4</span>Plan</div>' +
+          '<div class="rail" id="plan">' +
+            [1, 3, 6, 12].map(function (n) {
+              return '<button class="chip" type="button" data-m="' + n + '" aria-pressed="' +
+                (n === 1) + '">' + n + (n === 1 ? " month" : " months") + "</button>"; }).join("") +
+          "</div></div>" +
+
+        '<div class="summary" id="summary" hidden></div>' +
+        '<div class="field" id="cfWrap" hidden><label>Custom monthly fee ' +
+          '<span class="hint">optional, overrides the rate</span></label>' +
+          '<input class="input" id="cf" type="number" inputmode="numeric" ' +
+          'placeholder="Leave blank to use the set rate"></div>' +
+        '<button class="btn btn-primary btn-block hide" id="save">Add student</button>',
+
+      onMount: function (el) {
+        var live = ref.centres.filter(function (c) { return c.active; });
+        fill(el, "#centres", live.map(function (c) {
+          var n = ref.batches.filter(function (b) { return b.centre_id === c.id && b.active; }).length;
+          return { v: c.id, t: c.short_name || c.name, s: n + (n === 1 ? " batch" : " batches") };
+        }));
+        bind(el, "#centres", function (v) {
+          pick.centre = +v; pick.sport = null; pick.batch = null;
+          mark(el, "#s1"); showSports(el);
+          hide(el, "#s3"); hide(el, "#s4"); hide(el, "#summary"); hide(el, "#cfWrap");
+          App.$("#save", el).classList.add("hide");
+        });
+
+        App.$$("#plan .chip", el).forEach(function (c) {
+          c.addEventListener("click", function () {
+            App.$$("#plan .chip", el).forEach(function (x) { x.setAttribute("aria-pressed", "false"); });
+            c.setAttribute("aria-pressed", "true");
+            pick.months = +c.dataset.m; quote(el, pick);
+          });
+        });
+        App.$("#cf", el).addEventListener("input", function () { quote(el, pick); });
+        App.$("#save", el).addEventListener("click", function () { save(el, pick, this); });
+
+        /* A centre offers a sport if it has a batch for that sport, or a
+           mixed batch where the sport is decided per student. Three of
+           the five grounds run mixed batches, so this cannot simply read
+           batch.sport. */
+        function showSports(e2) {
+          var bs = ref.batches.filter(function (b) { return b.centre_id === pick.centre && b.active; });
+          var opts = bs.some(function (b) { return !b.sport; })
+            ? ref.sports.filter(function (x) { return x.active; })
+            : ref.sports.filter(function (x) {
+                return x.active && bs.some(function (b) { return b.sport === x.code; }); });
+          fill(e2, "#sports", opts.map(function (x) {
+            return { v: x.code, t: (x.icon ? x.icon + " " : "") + x.name };
+          }));
+          show(e2, "#s2");
+          bind(e2, "#sports", function (v) {
+            pick.sport = v; pick.batch = null;
+            mark(e2, "#s2"); showBatches(e2);
+            hide(e2, "#s4"); hide(e2, "#summary"); hide(e2, "#cfWrap");
+            App.$("#save", e2).classList.add("hide");
+          });
+        }
+
+        function showBatches(e2) {
+          var bs = ref.batches.filter(function (b) {
+            return b.centre_id === pick.centre && b.active && (!b.sport || b.sport === pick.sport);
+          });
+          if (!bs.length) {
+            App.$("#batches", e2).innerHTML =
+              '<span class="small muted">No batch here runs that sport yet. Add one in Setup.</span>';
+            show(e2, "#s3");
+            return;
+          }
+          fill(e2, "#batches", bs.map(function (b) {
+            return { v: b.id, t: b.name,
+                     s: App.days(b.days) + " · " + App.timeOf(b.start_time) };
+          }));
+          show(e2, "#s3");
+          bind(e2, "#batches", function (v) {
+            pick.batch = +v; mark(e2, "#s3");
+            show(e2, "#s4"); show(e2, "#cfWrap");
+            App.$("#save", e2).classList.remove("hide");
+            quote(e2, pick);
+          });
+        }
+      }
+    });
+  });
+
+  function step(n, label, id, hidden) {
+    return '<div class="rail-step" id="s' + n + '"' + (hidden ? " hidden" : "") + ">" +
+      '<div class="rail-k"><span class="rail-n">' + n + "</span>" + App.esc(label) + "</div>" +
+      '<div class="rail" id="' + id + '"></div></div>';
+  }
+  function fill(el, sel, items) {
+    App.$(sel, el).innerHTML = items.map(function (o) {
+      return '<button class="chip" type="button" data-v="' + App.esc(o.v) + '" aria-pressed="false">' +
+        App.esc(o.t) + (o.s ? "<small>" + App.esc(o.s) + "</small>" : "") + "</button>";
+    }).join("");
+  }
+  function bind(el, sel, onPick) {
+    App.$$(sel + " .chip", el).forEach(function (b) {
+      b.addEventListener("click", function () {
+        App.$$(sel + " .chip", el).forEach(function (x) { x.setAttribute("aria-pressed", "false"); });
+        b.setAttribute("aria-pressed", "true");
+        onPick(b.dataset.v);
+      });
+    });
+  }
+  function mark(el, sel) { App.$(sel, el).classList.add("is-done"); }
+  function show(el, sel) { App.$(sel, el).hidden = false; }
+  function hide(el, sel) { App.$(sel, el).hidden = true; }
+
+  /* Show the fee this student will actually be reminded for, and where
+     the number came from, before the record even exists. */
+  function quote(el, pick) {
+    var host = App.$("#summary", el);
+    var b = ref.batchById[pick.batch] || {};
+    var c = ref.centreById[pick.centre] || {};
+    var where = [c.short_name, pick.sport ? App.cap(pick.sport) : null, b.name]
+      .filter(Boolean).join(" · ");
+    host.hidden = false;
+
+    var custom = App.$("#cf", el).value;
+    if (custom) {
+      host.innerHTML = "<div>" + App.esc(where) + "</div>" +
+        '<div class="money">' + App.money(Number(custom) * pick.months) + "</div>" +
+        "<div>for " + pick.months + (pick.months === 1 ? " month" : " months") +
+        ", using your custom rate</div>";
+      return;
+    }
+    RS.rpc("resolve_fee", {
+      p_tenant: RS.TENANT, p_member: null, p_centre: pick.centre,
+      p_sport: pick.sport, p_batch: pick.batch, p_months: pick.months, p_custom: null
+    }).then(function (f) {
+      host.innerHTML = "<div>" + App.esc(where) + "</div>" +
+        ((f && f.amount != null)
+          ? '<div class="money">' + App.money(f.amount) + "</div><div>for " + pick.months +
+            (pick.months === 1 ? " month" : " months") + ', from the "' +
+            App.esc(String(f.label || String(f.source).replace(/_/g, " + "))) + '" rate</div>'
+          : "<div><b>No rate is set for this batch yet.</b> Set one in Setup, " +
+            "or type a custom fee below.</div>");
+    }).catch(function () { host.hidden = true; });
+  }
+
+  function save(el, pick, btn) {
+    var name = App.$("#n", el).value.trim();
+    var phone = App.phone10(App.$("#pp", el).value);
+    if (!name) { App.toast("Enter the student's name.", "bad"); return; }
+    if (!pick.batch) { App.toast("Choose a batch.", "bad"); return; }
+    if (phone && phone.length !== 10) { App.toast("Parent number must be 10 digits.", "bad"); return; }
+
+    var b = ref.batchById[pick.batch];
+    var cf = App.$("#cf", el).value;
+    var joined = App.isoDate();
+    var renewal = new Date(App.parseDate(joined));
+    renewal.setMonth(renewal.getMonth() + pick.months);
+
+    btn.disabled = true; btn.textContent = "Saving…";
+    RS.saveStudent(null, {
+      name: name,
+      parent_name: App.$("#pn", el).value.trim() || null,
+      parent_phone: phone || null, phone: phone || null,
+      program: pick.sport || null, joined: joined, status: "active"
+    }).then(function (rows) {
+      var m = rows[0];
+      return RS.saveEnrollment(null, {
+        member_id: m.id, centre_id: b.centre_id, batch_id: b.id,
+        sport: pick.sport || b.sport || null,
+        plan_months: pick.months,
+        custom_amount: cf === "" ? null : Number(cf),
+        joined_on: joined, renewal_on: App.isoDate(renewal), status: "active"
+      }).then(function () { return m; });
+    }).then(function (m) {
+      App.closeSheet();
+      App.toast(name + " added", "good");
+      RS.track("student_added");
+      location.href = "student.html?id=" + m.id;
+    }).catch(function (e) {
+      btn.disabled = false; btn.textContent = "Add student";
+      App.toast(e.message || "Could not save.", "bad");
+    });
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "raj-web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["http-server", "-p", "8135", "-c-1", "."],
+      "port": 8135
+    }
+  ]
+}

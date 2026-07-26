@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f6f5f1">
+<title>Today · Raj Sports</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="assets/css/app.css?v=2">
+</head>
+<body>
+  <header class="topbar"></header>
+
+  <main class="wrap">
+    <a class="lead is-wait reveal" id="lead" href="reminders.html" style="margin-top:16px">
+      <div class="lead-n" id="leadN">·</div>
+      <div style="flex:1;min-width:0">
+        <div class="lead-t" id="leadT">Checking fees</div>
+        <div class="lead-s" id="leadS">Loading today's list</div>
+      </div>
+      <div class="lead-go" id="leadGo"></div>
+    </a>
+
+    <div class="metrics section reveal" id="metrics"></div>
+
+    <section class="section reveal" id="collectWrap" hidden>
+      <div class="card">
+        <div class="card-hd"><h2>Collected this month</h2>
+          <span class="pill pill-volt" id="collectTotal"></span></div>
+        <div class="card-pad" id="collect"></div>
+      </div>
+    </section>
+
+    <section class="section reveal">
+      <div class="card">
+        <div class="card-hd"><h2>Needs attention</h2>
+          <a class="btn btn-sm btn-ghost" href="students.html">All students</a></div>
+        <div id="attn"></div>
+      </div>
+    </section>
+
+    <section class="section reveal" id="appsWrap" hidden>
+      <div class="card">
+        <div class="card-hd"><h2>New enquiries</h2><span class="pill" id="appN">0</span></div>
+        <div id="apps"></div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="nav"></nav>
+
+<script src="assets/js/cloud.js?v=2"></script>
+<script src="assets/js/core.js?v=2"></script>
+<script>
+(function () {
+  if (!App.requireStaff()) return;
+  App.shell("today", "Today");
+  RS.track("page_view");
+
+  App.skeleton(App.$("#attn"), 3);
+  var monthStart = App.isoDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+
+  Promise.all([
+    RS.reminderQueue(), RS.students(), RS.payments({ from: monthStart }),
+    RS.reference(), RS.applications("pending")
+  ]).then(function (r) {
+    var queue = r[0] || [], students = r[1] || [], pays = r[2] || [], ref = r[3], apps = r[4] || [];
+    renderLead(queue);
+    renderMetrics(queue, students, pays);
+    renderCollections(pays, ref);
+    renderAttention(students, ref);
+    renderApps(apps, ref);
+  }).catch(function (e) { App.fail(App.$("#attn"), e); });
+
+  /* The one job. Stays neutral until the queue has actually loaded:
+     saying "all caught up" over a list we have not fetched would tell
+     a manager to stop chasing on a day he should not. */
+  function renderLead(queue) {
+    var toSend = queue.filter(function (q) { return !q.blocked_reason && !q.already_sent; });
+    var call = queue.filter(function (q) { return !!q.blocked_reason; });
+    var lead = App.$("#lead");
+    App.navBadge(toSend.length);
+    App.$("#leadGo").textContent = "›";
+    lead.classList.remove("is-wait");
+
+    if (toSend.length) {
+      App.countUp(App.$("#leadN"), toSend.length);
+      App.$("#leadT").textContent = toSend.length === 1 ? "reminder to send" : "reminders to send";
+      App.$("#leadS").textContent =
+        App.money(toSend.reduce(function (a, q) { return a + (+q.amount || 0); }, 0)) + " in fees due";
+    } else if (call.length) {
+      App.countUp(App.$("#leadN"), call.length);
+      App.$("#leadT").textContent = "parents need a call";
+      App.$("#leadS").textContent = "WhatsApp cannot reach them";
+    } else {
+      lead.classList.add("is-clear");
+      App.$("#leadN").textContent = "✓";
+      App.$("#leadT").textContent = "All caught up";
+      App.$("#leadS").textContent = "No fee reminders pending today";
+    }
+  }
+
+  function renderMetrics(queue, students, pays) {
+    var active = 0, overdue = 0;
+    students.forEach(function (m) {
+      (m.enrollments || []).forEach(function (e) {
+        if (e.status !== "active") return;
+        active++;
+        if (App.feeState(e.renewal_on).key === "overdue") overdue++;
+      });
+    });
+    var overdueAmt = queue.reduce(function (a, q) {
+      return a + (q.days_since > 0 ? (+q.amount || 0) : 0); }, 0);
+    var paid = pays.filter(function (p) { return p.status === "paid"; });
+    var collected = paid.reduce(function (a, p) { return a + (+p.amount || 0); }, 0);
+
+    App.$("#metrics").innerHTML = [
+      met("Students", active, "active, all centres", ""),
+      met("Overdue", overdue, App.money(overdueAmt) + " pending", overdue ? "is-overdue" : "is-paid"),
+      met("Collected", collected, "this month", "is-paid", true),
+      met("Payments", paid.length, "this month", "")
+    ].join("");
+
+    // Count the numbers up once they exist in the DOM.
+    App.$$("#metrics [data-count]").forEach(function (n) {
+      var v = +n.dataset.count;
+      if (n.dataset.money === "1") App.countMoney(n, v); else App.countUp(n, v);
+    });
+  }
+  function met(k, v, sub, cls, isMoney) {
+    return '<div class="metric ' + cls + '"><div class="eyebrow">' + App.esc(k) + "</div>" +
+      '<div class="metric-v" data-count="' + v + '"' + (isMoney ? ' data-money="1"' : "") + ">0</div>" +
+      '<div class="metric-s">' + App.esc(sub) + "</div></div>";
+  }
+
+  /* Where the money came from. For a coach at five grounds this is
+     the number that decides where next week goes. */
+  function renderCollections(pays, ref) {
+    var paid = pays.filter(function (p) { return p.status === "paid"; });
+    if (!paid.length) return;
+    App.$("#collectWrap").hidden = false;
+
+    var by = {};
+    paid.forEach(function (p) {
+      var name = (ref.centreById[p.centre_id] || {}).short_name || "Unassigned";
+      by[name] = (by[name] || 0) + (+p.amount || 0);
+    });
+    var rows = Object.keys(by).map(function (k) { return { k: k, v: by[k] }; })
+      .sort(function (a, b) { return b.v - a.v; });
+    var max = rows[0].v || 1;
+    var total = rows.reduce(function (a, r) { return a + r.v; }, 0);
+    App.$("#collectTotal").textContent = App.money(total);
+
+    App.$("#collect").innerHTML = '<div class="bar">' + rows.map(function (r, i) {
+      return '<div class="bar-row"><div class="muted nowrap">' + App.esc(r.k) + "</div>" +
+        '<div class="bar-track"><div class="bar-fill" style="width:' +
+          Math.max(4, (r.v / max) * 100) + "%;animation-delay:" + (i * 70) + 'ms"></div></div>' +
+        '<div class="money nowrap">' + App.money(r.v) + "</div></div>";
+    }).join("") + "</div>";
+  }
+
+  function renderAttention(students, ref) {
+    var rows = [];
+    students.forEach(function (m) {
+      (m.enrollments || []).forEach(function (e) {
+        if (e.status !== "active") return;
+        var st = App.feeState(e.renewal_on);
+        if (st.key === "overdue" || st.key === "due" || st.key === "unset") rows.push({ m: m, e: e, st: st });
+      });
+    });
+    rows.sort(function (a, b) { return (b.st.days || 0) - (a.st.days || 0); });
+
+    var host = App.$("#attn");
+    if (!rows.length) {
+      return App.empty(host, "Everyone is paid up", "No student is due or overdue right now.");
+    }
+    host.innerHTML = '<div class="list">' + rows.slice(0, 8).map(function (r, i) {
+      var c = ref.centreById[r.e.centre_id] || {};
+      return '<a class="row row-in" style="animation-delay:' + (i * 45) + 'ms" href="student.html?id=' + r.m.id + '">' +
+        '<div class="avatar">' + App.esc(App.initials(r.m.name)) + "</div>" +
+        '<div class="row-main"><div class="row-t">' + App.esc(r.m.name) + "</div>" +
+        '<div class="row-s">' + App.esc([c.short_name, r.e.sport ? App.cap(r.e.sport) : null]
+          .filter(Boolean).join(" · ")) + "</div></div>" +
+        '<div class="row-end"><span class="status ' + r.st.cls + '">' + App.esc(r.st.label) + "</span></div></a>";
+    }).join("") + "</div>" +
+    (rows.length > 8 ? '<div class="row"><a class="btn btn-sm btn-ghost btn-block" href="students.html?filter=overdue">' +
+      "See all " + rows.length + "</a></div>" : "");
+  }
+
+  function renderApps(apps, ref) {
+    if (!apps.length) return;
+    App.$("#appsWrap").hidden = false;
+    App.$("#appN").textContent = apps.length;
+    var host = App.$("#apps");
+    host.innerHTML = '<div class="list">' + apps.slice(0, 6).map(function (a) {
+      var c = ref.centreById[a.centre_id] || {};
+      return '<div class="row" data-a="' + a.id + '">' +
+        '<div class="avatar">' + App.esc(App.initials(a.name)) + "</div>" +
+        '<div class="row-main"><div class="row-t">' + App.esc(a.name) + "</div>" +
+        '<div class="row-s">' + App.esc([c.short_name, a.sport ? App.cap(a.sport) : null, a.parent_phone]
+          .filter(Boolean).join(" · ")) + "</div></div>" +
+        '<div class="row-end btn-row" style="flex-wrap:nowrap">' +
+          '<button class="btn btn-sm btn-primary" data-ok>Approve</button>' +
+          '<button class="btn btn-sm" data-no>Reject</button></div></div>';
+    }).join("") + "</div>";
+
+    App.$$("[data-a]", host).forEach(function (node) {
+      var id = +node.dataset.a;
+      App.$("[data-ok]", node).addEventListener("click", function () {
+        var b = this; b.disabled = true; b.textContent = "…";
+        RS.approveApplication(id).then(function () {
+          node.remove(); App.toast("Approved, student added", "good");
+        }).catch(function (e) { b.disabled = false; b.textContent = "Approve"; App.toast(e.message, "bad"); });
+      });
+      App.$("[data-no]", node).addEventListener("click", function () {
+        App.confirm({ title: "Reject this enquiry?", body: "The parent is not notified.",
+                      confirm: "Reject", danger: true }).then(function (yes) {
+          if (!yes) return;
+          RS.rejectApplication(id).then(function () { node.remove(); App.toast("Rejected"); })
+            .catch(function (e) { App.toast(e.message, "bad"); });
+        });
+      });
+    });
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f6f5f1">
+<title>Fees · Raj Sports</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="assets/css/app.css?v=2">
+</head>
+<body>
+  <header class="topbar"></header>
+
+  <main class="wrap">
+    <div class="filters" style="margin-top:16px">
+      <select class="select" id="month"></select>
+      <select class="select" id="centre"><option value="">All centres</option></select>
+    </div>
+    <div id="view"></div>
+  </main>
+
+  <nav class="nav"></nav>
+
+<script src="assets/js/cloud.js?v=2"></script>
+<script src="assets/js/core.js?v=2"></script>
+<script>
+(function () {
+  if (!App.requireStaff()) return;
+  App.shell("fees", "Fees");
+  RS.track("page_view");
+
+  var view = App.$("#view"), ref = null;
+  App.skeleton(view, 5);
+
+  var months = [];
+  for (var i = 0; i < 12; i++) {
+    var d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
+    months.push({ v: App.isoDate(d), l: d.toLocaleDateString("en-IN", { month: "long", year: "numeric" }) });
+  }
+  App.$("#month").innerHTML = months.map(function (m) {
+    return '<option value="' + m.v + '">' + App.esc(m.l) + "</option>"; }).join("");
+
+  RS.reference().then(function (r) {
+    ref = r;
+    App.$("#centre").innerHTML = '<option value="">All centres</option>' +
+      ref.centres.filter(function (c) { return c.active; }).map(function (c) {
+        return '<option value="' + c.id + '">' + App.esc(c.short_name || c.name) + "</option>"; }).join("");
+    render();
+  }).catch(function (e) { App.fail(view, e); });
+
+  App.$("#month").addEventListener("change", render);
+  App.$("#centre").addEventListener("change", render);
+
+  function monthRange() {
+    var from = App.$("#month").value;
+    var d = App.parseDate(from); d.setMonth(d.getMonth() + 1); d.setDate(0);
+    return { from: from, to: App.isoDate(d) };
+  }
+
+  function render() {
+    App.skeleton(view, 5);
+    var r = monthRange(), centre = App.$("#centre").value;
+
+    RS.payments({ from: r.from, to: r.to }).then(function (rows) {
+      rows = (rows || []).filter(function (p) { return !centre || String(p.centre_id) === centre; });
+      var paid = rows.filter(function (p) { return p.status === "paid"; });
+      var pending = rows.filter(function (p) { return p.status === "pending_verification"; });
+      var total = paid.reduce(function (a, p) { return a + (+p.amount || 0); }, 0);
+      var adm = paid.filter(function (p) { return p.kind === "admission"; })
+                    .reduce(function (a, p) { return a + (+p.amount || 0); }, 0);
+
+      view.innerHTML =
+        '<div class="metrics section reveal">' +
+          met("Collected", total, paid.length + (paid.length === 1 ? " payment" : " payments"), "is-paid", true) +
+          met("Renewals", total - adm, "recurring fees", "", true) +
+          met("Admissions", adm, "one time", "", true) +
+          met("Unverified", pending.length, "claimed, not confirmed", pending.length ? "is-due" : "") +
+        "</div>" +
+        '<div class="card reveal"><div class="card-hd"><h2>Payments</h2></div><div id="rows"></div></div>';
+
+      App.$$("#view [data-count]").forEach(function (n) {
+        var v = +n.dataset.count;
+        if (n.dataset.money === "1") App.countMoney(n, v); else App.countUp(n, v);
+      });
+
+      var host = App.$("#rows");
+      if (!rows.length) {
+        return App.empty(host, "No payments this month",
+          "Record one from a student's profile or the reminder queue.");
+      }
+      host.innerHTML = '<div class="list">' + rows.map(function (p, i) {
+        var c = ref.centreById[p.centre_id] || {};
+        var pend = p.status === "pending_verification";
+        return '<a class="row row-in" style="animation-delay:' + Math.min(i * 24, 280) +
+          'ms" href="student.html?id=' + (p.member_id || "") + '">' +
+          '<div class="row-main"><div class="row-t">' + App.esc(p.name || "Unnamed") + "</div>" +
+          '<div class="row-s">' + App.esc([App.longDate(p.on_date), c.short_name,
+            p.sport ? App.cap(p.sport) : null, p.mode,
+            p.months ? p.months + " months" : null].filter(Boolean).join(" · ")) + "</div></div>" +
+          '<div class="row-end"><div class="money" style="font-weight:680;font-size:15px' +
+            (pend ? ";opacity:.55" : "") + '">' + App.money(p.amount) + "</div>" +
+            (pend ? '<div class="small" style="color:var(--due)">unverified</div>' : "") +
+          "</div></a>";
+      }).join("") + "</div>";
+    }).catch(function (e) { App.fail(view, e); });
+  }
+
+  function met(k, v, sub, cls, isMoney) {
+    return '<div class="metric ' + (cls || "") + '"><div class="eyebrow">' + App.esc(k) + "</div>" +
+      '<div class="metric-v" data-count="' + v + '"' + (isMoney ? ' data-money="1"' : "") + ">0</div>" +
+      '<div class="metric-s">' + App.esc(sub) + "</div></div>";
+  }
+})();
+</script>
+</body>
+</html>

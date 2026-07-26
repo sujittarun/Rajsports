@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f6f5f1">
+<title>Setup · Raj Sports</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="assets/css/app.css?v=2">
+<style>
+  .note {
+    padding: 13px 15px; border-radius: var(--r-card); margin-bottom: 16px;
+    background: var(--raised); border: 1px solid var(--hair);
+    color: var(--text-2); font-size: 12.5px; line-height: 1.6;
+  }
+  .note b { color: var(--text); font-weight: 640; }
+  .scope { font-size: 11.5px; color: var(--text-3); }
+  .amt { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 15px; }
+  .grp {
+    display: flex; align-items: center; gap: 9px;
+    padding: 12px 16px 9px; background: var(--sunken);
+    border-bottom: 1px solid var(--hair);
+  }
+  .grp > span:first-child { flex: 1; }
+</style>
+</head>
+<body>
+  <header class="topbar"></header>
+
+  <main class="wrap">
+    <div class="tabs" role="tablist" id="tabs" style="margin-top:16px">
+      <button role="tab" aria-selected="true"  data-tab="fees">Fees</button>
+      <button role="tab" aria-selected="false" data-tab="centres">Centres</button>
+      <button role="tab" aria-selected="false" data-tab="sports">Sports</button>
+      <button role="tab" aria-selected="false" data-tab="whatsapp">WhatsApp</button>
+      <button role="tab" aria-selected="false" data-tab="activity">Activity</button>
+    </div>
+    <div id="view"></div>
+  </main>
+
+  <nav class="nav"></nav>
+
+<script src="assets/js/cloud.js?v=2"></script>
+<script src="assets/js/core.js?v=2"></script>
+<script>
+(function () {
+  if (!App.requireStaff()) return;
+  App.shell("setup", "Setup");
+  RS.track("page_view");
+
+  var view = App.$("#view"), ref = null;
+  var TABS = ["fees", "centres", "sports", "whatsapp", "activity"];
+  var tab = (location.hash || "#fees").slice(1);
+  if (TABS.indexOf(tab) < 0) tab = "fees";
+  var placeInk = App.tabInk(App.$("#tabs"));
+
+  App.skeleton(view, 4);
+  RS.reference().then(function (r) { ref = r; syncTabs(); render(); })
+                .catch(function (e) { App.fail(view, e); });
+
+  App.$$("#tabs button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      tab = b.dataset.tab; location.hash = tab; syncTabs(); render();
+    });
+  });
+  function syncTabs() {
+    App.$$("#tabs button").forEach(function (x) {
+      x.setAttribute("aria-selected", String(x.dataset.tab === tab));
+    });
+    placeInk();
+  }
+  function render() {
+    if (tab === "fees")     return renderFees();
+    if (tab === "centres")  return renderCentres();
+    if (tab === "sports")   return renderSports();
+    if (tab === "activity") return renderActivity();
+    return renderWhatsapp();
+  }
+  function refresh(after) {
+    return RS.reference(true).then(function (r) { ref = r; if (after) after(); });
+  }
+
+  /* ============================================================
+     FEES
+     ============================================================ */
+  function renderFees() {
+    App.skeleton(view, 4);
+    RS.feeRules().then(function (rules) {
+      view.innerHTML =
+        '<div class="note reveal">Set one rate and it covers everyone. Add a more specific rate ' +
+        'only where reality differs: a rate for a sport beats the overall default, a rate for a ' +
+        'centre and sport together beats that, and a fee typed on a single student beats them all. ' +
+        '<b>Every reminder quotes whichever one wins.</b></div>' +
+        '<div class="card reveal"><div class="card-hd"><h2>Rates</h2>' +
+          '<button class="btn btn-sm btn-primary" id="addRule">＋ Rate</button></div>' +
+          '<div id="rules"></div></div>';
+      App.$("#addRule").addEventListener("click", function () { feeSheet(null); });
+
+      var host = App.$("#rules");
+      if (!rules.length) {
+        host.innerHTML = '<div class="empty"><div class="empty-t">No rates set yet</div>' +
+          '<div class="small">Start with one monthly fee for everyone, then add exceptions.</div>' +
+          '<button class="btn btn-primary mt-2" id="first">Set the default fee</button></div>';
+        App.$("#first").addEventListener("click", function () { feeSheet(null); });
+        return;
+      }
+      // Listed most specific first: the order the engine resolves in.
+      var rank = function (r) {
+        return r.member_id ? 50 : r.batch_id ? 45 : (r.centre_id && r.sport) ? 40
+             : r.sport ? 30 : r.centre_id ? 20 : 10;
+      };
+      rules.sort(function (a, b) { return rank(b) - rank(a); });
+
+      host.innerHTML = '<div class="list">' + rules.map(function (r, i) {
+        return '<div class="row row-in" style="animation-delay:' + (i * 32) + 'ms" data-r="' + r.id + '">' +
+          '<div class="row-main"><div class="row-t">' + App.esc(r.label || scopeName(r)) + "</div>" +
+          '<div class="scope">' + App.esc(scopeName(r)) +
+            (r.admission_fee > 0 ? " · joining " + App.money(r.admission_fee) : "") +
+            (r.active ? "" : " · off") + "</div></div>" +
+          '<div class="row-end"><div class="amt">' + App.money(r.monthly_amount) +
+            '<span class="small muted">/mo</span></div></div></div>';
+      }).join("") + "</div>";
+
+      App.$$("[data-r]", host).forEach(function (n) {
+        n.addEventListener("click", function () {
+          feeSheet(rules.filter(function (x) { return x.id === +n.dataset.r; })[0]);
+        });
+      });
+    }).catch(function (e) { App.fail(view, e); });
+  }
+
+  function scopeName(r) {
+    var bits = [];
+    if (r.centre_id) bits.push((ref.centreById[r.centre_id] || {}).short_name || "Centre");
+    if (r.sport)     bits.push(App.cap(r.sport));
+    if (r.batch_id)  bits.push((ref.batchById[r.batch_id] || {}).name || "Batch");
+    if (r.member_id) bits.push("one student");
+    return bits.length ? bits.join(" · ") : "Everyone";
+  }
+
+  function feeSheet(r) {
+    App.sheet({
+      title: r ? "Edit rate" : "New rate",
+      html:
+        '<div class="field"><label>Name <span class="hint">optional</span></label>' +
+          '<input class="input" id="lb" value="' + App.esc(r ? (r.label || "") : "") +
+          '" placeholder="Basketball at BTV"></div>' +
+        '<div class="field"><label>Applies to</label><div class="grid-2">' +
+          '<select class="select" id="ce" style="margin-bottom:8px"><option value="">All centres</option>' +
+            ref.centres.map(function (c) { return '<option value="' + c.id + '"' +
+              (r && r.centre_id === c.id ? " selected" : "") + ">" +
+              App.esc(c.short_name || c.name) + "</option>"; }).join("") + "</select>" +
+          '<select class="select" id="sp" style="margin-bottom:8px"><option value="">All sports</option>' +
+            ref.sports.map(function (s) { return '<option value="' + App.esc(s.code) + '"' +
+              (r && r.sport === s.code ? " selected" : "") + ">" + App.esc(s.name) + "</option>"; }).join("") +
+        "</select></div>" +
+        '<div class="hint">Leave both on “All” for the rate everyone falls back to.</div></div>' +
+        '<div class="grid-2">' +
+          '<div class="field"><label>Monthly fee</label><input class="input" id="am" type="number" ' +
+            'inputmode="numeric" value="' + App.esc(r ? r.monthly_amount : "") + '"></div>' +
+          '<div class="field"><label>Joining fee <span class="hint">one time</span></label>' +
+            '<input class="input" id="ad" type="number" inputmode="numeric" value="' +
+            App.esc(r ? (r.admission_fee || 0) : 0) + '"></div>' +
+        "</div>" +
+        '<div class="field"><label>Discounted longer plans <span class="hint">optional</span></label>' +
+          '<div class="grid-2">' +
+            '<input class="input" id="p3" type="number" inputmode="numeric" style="margin-bottom:8px" ' +
+              'placeholder="3 month total" value="' + App.esc(planVal(r, 3)) + '">' +
+            '<input class="input" id="p6" type="number" inputmode="numeric" style="margin-bottom:8px" ' +
+              'placeholder="6 month total" value="' + App.esc(planVal(r, 6)) + '">' +
+          "</div><div class=\"hint\">Blank means the monthly fee times the number of months.</div></div>" +
+        (r ? '<label class="small" style="display:flex;gap:9px;align-items:center;margin-bottom:14px">' +
+             '<input type="checkbox" id="ac"' + (r.active ? " checked" : "") + "> Active</label>" : "") +
+        '<button class="btn btn-primary btn-block" id="save">Save rate</button>' +
+        (r ? '<button class="btn btn-block mt-1" id="del" style="color:var(--overdue)">Delete</button>' : ""),
+      onMount: function (el) {
+        App.$("#save", el).addEventListener("click", function () {
+          var btn = this, amt = Number(App.$("#am", el).value);
+          if (!amt || amt <= 0) { App.toast("Enter a monthly fee.", "bad"); return; }
+          var plans = {};
+          if (App.$("#p3", el).value) plans["3"] = Number(App.$("#p3", el).value);
+          if (App.$("#p6", el).value) plans["6"] = Number(App.$("#p6", el).value);
+          btn.disabled = true; btn.textContent = "Saving…";
+          RS.saveFeeRule(r && r.id, {
+            label: App.$("#lb", el).value.trim() || null,
+            centre_id: App.$("#ce", el).value ? +App.$("#ce", el).value : null,
+            sport: App.$("#sp", el).value || null,
+            monthly_amount: amt,
+            admission_fee: Number(App.$("#ad", el).value) || 0,
+            plan_amounts: plans,
+            active: r ? App.$("#ac", el).checked : true
+          }).then(function () { App.closeSheet(); App.toast("Rate saved", "good"); renderFees(); })
+            .catch(function (e) { btn.disabled = false; btn.textContent = "Save rate"; App.toast(e.message, "bad"); });
+        });
+        var d = App.$("#del", el);
+        if (d) d.addEventListener("click", function () {
+          App.confirm({ title: "Delete this rate?",
+            body: "Students on it fall back to the next matching rate.",
+            confirm: "Delete", danger: true }).then(function (yes) {
+            if (!yes) return;
+            RS.deleteFeeRule(r.id).then(function () {
+              App.closeSheet(); App.toast("Deleted"); renderFees();
+            }).catch(function (e) { App.toast(e.message, "bad"); });
+          });
+        });
+      }
+    });
+  }
+  function planVal(r, n) {
+    if (!r || !r.plan_amounts) return "";
+    return r.plan_amounts[String(n)] != null ? r.plan_amounts[String(n)] : "";
+  }
+
+  /* ============================================================
+     CENTRES, BATCHES AND COACHES
+     ============================================================ */
+  function renderCentres() {
+    view.innerHTML =
+      '<div class="note reveal">Add a venue, add a batch, or move a batch time. A centre or batch ' +
+      'that already has students can be <b>closed but never deleted</b>, so past fees always still ' +
+      'add up.</div>' +
+      '<div class="card reveal"><div class="card-hd"><h2>Centres and batches</h2>' +
+      '<button class="btn btn-sm btn-primary" id="addC">＋ Centre</button></div><div id="cs"></div></div>' +
+      '<div class="card section reveal"><div class="card-hd"><h2>Coaches</h2>' +
+      '<button class="btn btn-sm" id="addCo">＋ Coach</button></div><div id="co"></div></div>';
+
+    App.$("#addC").addEventListener("click", function () { centreSheet(null); });
+    App.$("#addCo").addEventListener("click", function () { coachSheet(null); });
+
+    var host = App.$("#cs");
+    var live = ref.centres.filter(function (c) { return c.active; });
+    if (!live.length) {
+      App.empty(host, "No centres yet", "Add the first venue you coach at.");
+    } else {
+      host.innerHTML = live.map(function (c) {
+        var bs = ref.batches.filter(function (b) { return b.centre_id === c.id && b.active; });
+        return '<div class="grp"><span class="eyebrow">' + App.esc(c.short_name || c.name) + "</span>" +
+            '<button class="btn btn-sm" data-ec="' + c.id + '">Edit</button>' +
+            '<button class="btn btn-sm" data-ab="' + c.id + '">＋ Batch</button></div>' +
+          '<div class="list">' + (bs.length ? bs.map(function (b) {
+            var coach = ref.coaches.filter(function (x) { return x.id === b.coach_id; })[0];
+            return '<div class="row"><div class="row-main"><div class="row-t">' + App.esc(b.name) +
+              (b.sport ? '  <span class="pill">' + App.esc(App.cap(b.sport)) + "</span>" : "") + "</div>" +
+              '<div class="row-s">' + App.esc(App.days(b.days) + " · " + App.timeOf(b.start_time) +
+                " to " + App.timeOf(b.end_time) + (coach ? " · " + coach.name : "")) + "</div></div>" +
+              '<div class="row-end btn-row" style="flex-wrap:nowrap">' +
+                '<button class="btn btn-sm" data-tb="' + b.id + '">Timing</button>' +
+                '<button class="btn btn-sm" data-eb="' + b.id + '">Edit</button></div></div>';
+          }).join("") : '<div class="row"><span class="muted small">No batches yet</span></div>') + "</div>";
+      }).join("");
+
+      App.$$("[data-ec]", host).forEach(function (b) { b.addEventListener("click", function () {
+        centreSheet(ref.centreById[+b.dataset.ec]); }); });
+      App.$$("[data-ab]", host).forEach(function (b) { b.addEventListener("click", function () {
+        batchSheet(null, +b.dataset.ab); }); });
+      App.$$("[data-eb]", host).forEach(function (b) { b.addEventListener("click", function () {
+        var bt = ref.batchById[+b.dataset.eb]; batchSheet(bt, bt.centre_id); }); });
+      App.$$("[data-tb]", host).forEach(function (b) { b.addEventListener("click", function () {
+        timingSheet(ref.batchById[+b.dataset.tb]); }); });
+    }
+
+    var ch = App.$("#co");
+    if (!ref.coaches.length) {
+      App.empty(ch, "No coaches yet", "Add one to assign them to a batch.");
+    } else {
+      ch.innerHTML = '<div class="list">' + ref.coaches.map(function (c) {
+        return '<div class="row" data-c="' + c.id + '">' +
+          '<div class="avatar">' + App.esc(App.initials(c.name)) + "</div>" +
+          '<div class="row-main"><div class="row-t">' + App.esc(c.name) + "</div>" +
+          '<div class="row-s">' + App.esc(App.cap(c.role) +
+            (c.phone ? " · " + App.phone10(c.phone) : "")) + "</div></div></div>";
+      }).join("") + "</div>";
+      App.$$("[data-c]", ch).forEach(function (n) {
+        n.addEventListener("click", function () {
+          coachSheet(ref.coaches.filter(function (c) { return c.id === +n.dataset.c; })[0]);
+        });
+      });
+    }
+  }
+
+  function centreSheet(c) {
+    App.sheet({
+      title: c ? "Edit centre" : "New centre",
+      html:
+        '<div class="field"><label>Full name</label><input class="input" id="n" value="' +
+          App.esc(c ? c.name : "") + '" placeholder="Delhi Public School Miyapur"></div>' +
+        '<div class="field"><label>Short name <span class="hint">shown all over the app</span></label>' +
+          '<input class="input" id="s" value="' + App.esc(c ? (c.short_name || "") : "") +
+          '" placeholder="DPS Miyapur"></div>' +
+        '<div class="field"><label>Address <span class="hint">optional</span></label>' +
+          '<input class="input" id="a" value="' + App.esc(c ? (c.address || "") : "") + '"></div>' +
+        (c ? '<label class="small" style="display:flex;gap:9px;align-items:center;margin-bottom:14px">' +
+             '<input type="checkbox" id="ac"' + (c.active ? " checked" : "") +
+             '> Open <span class="muted">unticking hides it without losing history</span></label>' : "") +
+        '<button class="btn btn-primary btn-block" id="save">Save centre</button>',
+      onMount: function (el) {
+        App.$("#save", el).addEventListener("click", function () {
+          var btn = this, name = App.$("#n", el).value.trim();
+          if (!name) { App.toast("Enter a name.", "bad"); return; }
+          btn.disabled = true; btn.textContent = "Saving…";
+          var ok = function () { App.closeSheet(); App.toast("Saved", "good"); refresh(renderCentres); };
+          var no = function (e) { btn.disabled = false; btn.textContent = "Save centre";
+                                  App.toast(e.message || "Could not save.", "bad"); };
+          if (c) {
+            RS.saveCentre(c.id, { name: name, short_name: App.$("#s", el).value.trim() || name,
+              address: App.$("#a", el).value.trim() || null,
+              active: App.$("#ac", el).checked }).then(ok).catch(no);
+          } else {
+            RS.addCentre({ name: name, short_name: App.$("#s", el).value.trim() || null,
+              address: App.$("#a", el).value.trim() || null }).then(ok).catch(no);
+          }
+        });
+      }
+    });
+  }
+
+  function dayChips(sel) {
+    return '<div class="chips" id="days">' + [1,2,3,4,5,6,7].map(function (d) {
+      return '<button class="chip" type="button" data-d="' + d + '" aria-pressed="' +
+        (sel.indexOf(d) >= 0) + '">' + ["","Mon","Tue","Wed","Thu","Fri","Sat","Sun"][d] + "</button>";
+    }).join("") + "</div>";
+  }
+  function readDays(el) {
+    return App.$$("#days .chip", el).filter(function (c) {
+      return c.getAttribute("aria-pressed") === "true"; }).map(function (c) { return +c.dataset.d; });
+  }
+  function wireDays(el) {
+    App.$$("#days .chip", el).forEach(function (c) {
+      c.addEventListener("click", function () {
+        c.setAttribute("aria-pressed", String(c.getAttribute("aria-pressed") !== "true"));
+      });
+    });
+  }
+
+  /* Moving a batch time is the most common edit and the one parents
+     feel, so it gets its own one screen action. */
+  function timingSheet(b) {
+    var n = 0;
+    App.sheet({
+      title: "Timing for " + b.name,
+      html:
+        '<p class="small muted">Now ' + App.esc(App.days(b.days) + " · " +
+          App.timeOf(b.start_time) + " to " + App.timeOf(b.end_time)) + "</p>" +
+        '<div class="field"><label>Days</label>' + dayChips(b.days || []) + "</div>" +
+        '<div class="grid-2">' +
+          '<div class="field"><label>Start</label><input class="input" id="st" type="time" value="' +
+            App.esc(String(b.start_time).slice(0, 5)) + '"></div>' +
+          '<div class="field"><label>End</label><input class="input" id="et" type="time" value="' +
+            App.esc(String(b.end_time).slice(0, 5)) + '"></div>' +
+        "</div>" +
+        '<div id="who" class="small muted mb-2"></div>' +
+        '<button class="btn btn-primary btn-block" id="save">Change timing</button>',
+      onMount: function (el) {
+        wireDays(el);
+        // Say who is affected BEFORE the change, not after.
+        RS.students().then(function (all) {
+          n = all.reduce(function (a, m) {
+            return a + (m.enrollments || []).filter(function (e) {
+              return e.batch_id === b.id && e.status === "active"; }).length; }, 0);
+          App.$("#who", el).textContent = n
+            ? n + (n === 1 ? " student is" : " students are") + " in this batch. Let their parents know."
+            : "No students are in this batch yet.";
+        }).catch(function () {});
+
+        App.$("#save", el).addEventListener("click", function () {
+          var btn = this, days = readDays(el);
+          var st = App.$("#st", el).value, et = App.$("#et", el).value;
+          if (!days.length) { App.toast("Pick at least one day.", "bad"); return; }
+          if (!st || !et || et <= st) { App.toast("End time must be after the start time.", "bad"); return; }
+          btn.disabled = true; btn.textContent = "Saving…";
+          RS.updateBatchTiming(b.id, days, st, et).then(function () {
+            App.closeSheet();
+            App.toast("Timing changed" + (n ? ", tell the " + n + " parents" : ""), "good");
+            refresh(renderCentres);
+          }).catch(function (e) {
+            btn.disabled = false; btn.textContent = "Change timing";
+            App.toast(e.message || "Could not save.", "bad");
+          });
+        });
+      }
+    });
+  }
+
+  function batchSheet(b, centreId) {
+    App.sheet({
+      title: b ? "Edit batch" : "New batch",
+      html:
+        '<div class="field"><label>Name</label><input class="input" id="n" value="' +
+          App.esc(b ? b.name : "") + '" placeholder="Batch 3"></div>' +
+        (b ? "" : '<div class="field"><label>Days</label>' + dayChips([]) + "</div>" +
+        '<div class="grid-2">' +
+          '<div class="field"><label>Start</label><input class="input" id="st" type="time" value="17:00"></div>' +
+          '<div class="field"><label>End</label><input class="input" id="et" type="time" value="18:00"></div>' +
+        "</div>") +
+        '<div class="field"><label>Sport <span class="hint">leave mixed if it varies per student</span></label>' +
+          '<select class="select" id="sp"><option value="">Mixed, decided per student</option>' +
+            ref.sports.filter(function (s) { return s.active; }).map(function (s) {
+              return '<option value="' + App.esc(s.code) + '"' +
+              (b && b.sport === s.code ? " selected" : "") + ">" + App.esc(s.name) + "</option>"; }).join("") +
+          "</select></div>" +
+        '<div class="field"><label>Coach <span class="hint">optional</span></label>' +
+          '<select class="select" id="co"><option value="">Not assigned</option>' +
+            ref.coaches.map(function (c) { return '<option value="' + c.id + '"' +
+              (b && b.coach_id === c.id ? " selected" : "") + ">" + App.esc(c.name) + "</option>"; }).join("") +
+          "</select></div>" +
+        (b ? '<label class="small" style="display:flex;gap:9px;align-items:center;margin-bottom:14px">' +
+             '<input type="checkbox" id="ac"' + (b.active ? " checked" : "") +
+             '> Running <span class="muted">unticking closes it and frees its students</span></label>' +
+             '<p class="small muted">Use <b>Timing</b> on the batch row to move the days or hours.</p>' : "") +
+        '<button class="btn btn-primary btn-block" id="save">Save batch</button>',
+      onMount: function (el) {
+        if (!b) wireDays(el);
+        App.$("#save", el).addEventListener("click", function () {
+          var btn = this, name = App.$("#n", el).value.trim();
+          if (!name) { App.toast("Name the batch.", "bad"); return; }
+          var ok = function () { App.closeSheet(); App.toast("Saved", "good"); refresh(renderCentres); };
+          var no = function (e) { btn.disabled = false; btn.textContent = "Save batch";
+                                  App.toast(e.message || "Could not save.", "bad"); };
+          btn.disabled = true; btn.textContent = "Saving…";
+          if (b) {
+            RS.saveBatch(b.id, { name: name, sport: App.$("#sp", el).value || null,
+              coach_id: App.$("#co", el).value ? +App.$("#co", el).value : null,
+              active: App.$("#ac", el).checked }).then(ok).catch(no);
+          } else {
+            var days = readDays(el);
+            var st = App.$("#st", el).value, et = App.$("#et", el).value;
+            if (!days.length) { no({ message: "Pick at least one day." }); return; }
+            if (!st || !et || et <= st) { no({ message: "End time must be after the start time." }); return; }
+            RS.addBatch({ centre_id: centreId, name: name, days: days, start_time: st, end_time: et,
+              sport: App.$("#sp", el).value || null,
+              coach_id: App.$("#co", el).value ? +App.$("#co", el).value : null }).then(ok).catch(no);
+          }
+        });
+      }
+    });
+  }
+
+  function coachSheet(c) {
+    App.sheet({
+      title: c ? "Edit coach" : "New coach",
+      html:
+        '<div class="field"><label>Name</label><input class="input" id="n" value="' +
+          App.esc(c ? c.name : "") + '"></div>' +
+        '<div class="grid-2">' +
+          '<div class="field"><label>Phone</label><input class="input" id="p" type="tel" ' +
+            'inputmode="numeric" maxlength="10" value="' + App.esc(c ? App.phone10(c.phone) : "") + '"></div>' +
+          '<div class="field"><label>Role</label><select class="select" id="r">' +
+            ["coach","head","assistant","owner"].map(function (x) { return '<option value="' + x + '"' +
+              (c && c.role === x ? " selected" : "") + ">" + App.cap(x) + "</option>"; }).join("") +
+          "</select></div></div>" +
+        '<button class="btn btn-primary btn-block" id="save">Save coach</button>',
+      onMount: function (el) {
+        App.$("#save", el).addEventListener("click", function () {
+          var btn = this, name = App.$("#n", el).value.trim();
+          if (!name) { App.toast("Enter a name.", "bad"); return; }
+          btn.disabled = true; btn.textContent = "Saving…";
+          RS.saveCoach(c && c.id, { name: name, phone: App.phone10(App.$("#p", el).value) || null,
+            role: App.$("#r", el).value, active: true })
+            .then(function () { App.closeSheet(); App.toast("Saved", "good"); refresh(renderCentres); })
+            .catch(function (e) { btn.disabled = false; btn.textContent = "Save coach";
+                                  App.toast(e.message, "bad"); });
+        });
+      }
+    });
+  }
+
+  /* ============================================================
+     SPORTS
+     ============================================================ */
+  function renderSports() {
+    view.innerHTML =
+      '<div class="note reveal">Adding a sport makes it available when you create a batch, enrol a ' +
+      'student, or set a rate. A sport already in use can be switched off but not deleted.</div>' +
+      '<div class="card reveal"><div class="card-hd"><h2>Sports</h2>' +
+      '<button class="btn btn-sm btn-primary" id="addS">＋ Sport</button></div><div id="sl"></div></div>';
+    App.$("#addS").addEventListener("click", function () { sportSheet(null); });
+
+    var host = App.$("#sl");
+    if (!ref.sports.length) return App.empty(host, "No sports yet", "Add the first sport you coach.");
+    host.innerHTML = '<div class="list">' + ref.sports.map(function (s, i) {
+      var used = ref.batches.filter(function (b) { return b.sport === s.code; }).length;
+      return '<div class="row row-in" style="animation-delay:' + (i * 30) + 'ms" data-s="' + s.id + '"' +
+        (s.active ? "" : ' style="opacity:.5"') + ">" +
+        '<div class="avatar">' + App.esc(s.icon || "•") + "</div>" +
+        '<div class="row-main"><div class="row-t">' + App.esc(s.name) +
+          (s.active ? "" : '  <span class="pill">off</span>') + "</div>" +
+        '<div class="row-s">' + (used ? used + (used === 1 ? " batch" : " batches") : "not on any batch") +
+        "</div></div></div>";
+    }).join("") + "</div>";
+
+    App.$$("[data-s]", host).forEach(function (n) {
+      n.addEventListener("click", function () {
+        sportSheet(ref.sports.filter(function (s) { return s.id === +n.dataset.s; })[0]);
+      });
+    });
+  }
+
+  function sportSheet(s) {
+    App.sheet({
+      title: s ? "Edit sport" : "New sport",
+      html:
+        '<div class="grid-2">' +
+          '<div class="field"><label>Name</label><input class="input" id="n" value="' +
+            App.esc(s ? s.name : "") + '" placeholder="Volleyball"></div>' +
+          '<div class="field"><label>Icon <span class="hint">an emoji</span></label>' +
+            '<input class="input" id="i" maxlength="4" value="' + App.esc(s ? (s.icon || "") : "") +
+            '" placeholder="🏐"></div>' +
+        "</div>" +
+        (s ? '<label class="small" style="display:flex;gap:9px;align-items:center;margin-bottom:14px">' +
+             '<input type="checkbox" id="a"' + (s.active ? " checked" : "") + "> Offered</label>" : "") +
+        '<button class="btn btn-primary btn-block" id="save">Save sport</button>' +
+        (s ? '<button class="btn btn-block mt-1" id="del" style="color:var(--overdue)">Delete</button>' : ""),
+      onMount: function (el) {
+        App.$("#save", el).addEventListener("click", function () {
+          var btn = this, name = App.$("#n", el).value.trim();
+          if (!name) { App.toast("Name the sport.", "bad"); return; }
+          btn.disabled = true; btn.textContent = "Saving…";
+          var ok = function () { App.closeSheet(); App.toast("Saved", "good"); refresh(renderSports); };
+          var no = function (e) { btn.disabled = false; btn.textContent = "Save sport";
+                                  App.toast(e.message || "Could not save.", "bad"); };
+          if (s) {
+            RS.saveSport(s.id, { name: name, icon: App.$("#i", el).value.trim() || null,
+              active: App.$("#a", el).checked }).then(ok).catch(no);
+          } else {
+            RS.addSport(name, App.$("#i", el).value.trim()).then(ok).catch(no);
+          }
+        });
+        var d = App.$("#del", el);
+        if (d) d.addEventListener("click", function () {
+          App.confirm({ title: "Delete " + s.name + "?",
+            body: "If a batch, student or rate already uses it, the app keeps it and you can switch it off instead.",
+            confirm: "Delete", danger: true }).then(function (yes) {
+            if (!yes) return;
+            RS.deleteSport(s.id).then(function () {
+              App.closeSheet(); App.toast("Deleted"); refresh(renderSports);
+            }).catch(function (e) { App.toast(e.message, "bad"); });
+          });
+        });
+      }
+    });
+  }
+
+  /* ============================================================
+     WHATSAPP
+     ============================================================ */
+  function renderWhatsapp() {
+    App.skeleton(view, 3);
+    RS.tenantConfig().then(function (cfg) {
+      var wa = cfg.whatsapp || {};
+      var live = wa.enabled && wa.mode === "auto" && !wa.dryRun;
+      view.innerHTML =
+        '<div class="card reveal"><div class="card-hd"><h2>Sending</h2>' +
+          '<span class="pill ' + (live ? "pill-volt" : "pill-due") + '">' +
+            (live ? "Automatic" : "By hand") + "</span></div>" +
+          '<div class="card-pad">' + (live
+            ? '<p class="small">Reminders send on their own every day at ' +
+              App.esc(String(wa.sendHourIST || 15)) + ":00 from the Raj Sports WhatsApp Business " +
+              "number. You can still send any of them by hand.</p>"
+            : '<p class="small">Right now the app writes each message and you send it with one tap ' +
+              "from the Reminders screen. Nothing goes out without you.</p>" +
+              '<p class="small muted">Three things switch automatic sending on: a WhatsApp Business ' +
+              "number for Raj Sports, a Meta Cloud API app, and Meta approving the three message " +
+              "templates. After that it is a settings change, not a new app.</p>") +
+          "</div></div>" +
+        '<div class="card section reveal"><div class="card-hd"><h2>Setup status</h2></div><div class="list">' +
+          chk("WhatsApp Business number", wa.phoneNumberId) +
+          chk("Meta Cloud API app", wa.wabaId) +
+          chk("Manager alert number", wa.managerPhone) +
+          chk("Approved templates", wa.templates && wa.templates.dueToday) +
+        "</div></div>" +
+        '<div class="note mt-2 reveal">The words a parent reads are the same whether a reminder goes ' +
+        'out automatically or you send it by hand, so <b>Raj Sports always sounds like one voice</b>.</div>';
+    }).catch(function (e) { App.fail(view, e); });
+  }
+  function chk(label, val) {
+    return '<div class="row"><div class="row-main"><div class="row-t">' + App.esc(label) + "</div></div>" +
+      '<div class="row-end"><span class="status ' + (val ? "status-paid" : "status-muted") + '">' +
+      (val ? "Ready" : "Not set") + "</span></div></div>";
+  }
+
+  /* ============================================================
+     ACTIVITY
+     ============================================================ */
+  function renderActivity() {
+    App.skeleton(view, 5);
+    Promise.all([RS.health(), RS.auditLog(50)]).then(function (r) {
+      var h = r[0] || {}, rows = r[1] || [];
+      var cfg = h.config || {}, rem = h.reminders || {}, use = h.usage || {};
+      var problems = (+cfg.students_without_fee || 0) + (+cfg.students_without_phone || 0);
+
+      view.innerHTML =
+        '<div class="metrics section reveal">' +
+          mtr("Reminders 30d", rem.sent_30d || 0, (rem.delivered_30d || 0) + " confirmed", "") +
+          mtr("Failed", rem.failed_30d || 0, "delivery errors", rem.failed_30d ? "is-overdue" : "") +
+          mtr("No fee set", cfg.students_without_fee || 0, "cannot be billed",
+              cfg.students_without_fee ? "is-due" : "") +
+          mtr("No phone", cfg.students_without_phone || 0, "cannot be reminded",
+              cfg.students_without_phone ? "is-due" : "") +
+        "</div>" +
+        (problems
+          ? '<div class="note reveal" style="background:var(--due-haze);color:var(--due)">' +
+            "Some students cannot be reminded automatically. Reminders, " +
+            "<b>Needs a call</b> shows exactly who and why.</div>"
+          : "") +
+        '<div class="card section reveal"><div class="card-hd"><h2>App errors</h2>' +
+          '<span class="pill ' + (use.errors_30d ? "pill-overdue" : "pill-paid") + '">' +
+          (use.errors_30d || 0) + " in 30 days</span></div>" +
+          '<div class="card-pad small muted">Anything that breaks reports itself here and to the ' +
+          "Academy Manager console. " + (use.last_event_at ? "Last used " +
+            App.esc(new Date(use.last_event_at).toLocaleString("en-IN",
+              { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })) + "." : "") +
+          "</div></div>" +
+        '<div class="card reveal"><div class="card-hd"><h2>Recent changes</h2></div><div id="au"></div></div>';
+
+      var host = App.$("#au");
+      if (!rows.length) return App.empty(host, "No changes yet", "Every fee and batch edit is recorded here.");
+      host.innerHTML = '<div class="list">' + rows.map(function (a, i) {
+        return '<div class="row row-in" style="animation-delay:' + Math.min(i * 26, 260) + 'ms">' +
+          '<div class="row-main"><div class="row-t">' + App.esc(auditTitle(a)) + "</div>" +
+          '<div class="row-s">' + App.esc(new Date(a.at).toLocaleString("en-IN",
+            { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) +
+            " · " + (a.actor || "system")) + "</div></div>" +
+          '<div class="row-end"><span class="pill">' +
+            App.esc(String(a.action).replace(/_/g, " ")) + "</span></div></div>";
+      }).join("") + "</div>";
+    }).catch(function (e) { App.fail(view, e); });
+  }
+  function mtr(k, v, sub, cls) {
+    return '<div class="metric ' + cls + '"><div class="eyebrow">' + App.esc(k) + "</div>" +
+      '<div class="metric-v">' + App.esc(String(v)) + "</div>" +
+      '<div class="metric-s">' + App.esc(sub) + "</div></div>";
+  }
+  function auditTitle(a) {
+    var d = a.after || a.before || {};
+    var what = d.label || d.name || ("#" + a.entity_id);
+    if (a.action === "timing_changed") return "Timing changed for " + what;
+    if (a.entity === "fee_rule" && a.before && a.after &&
+        a.before.monthly_amount !== a.after.monthly_amount) {
+      return "Fee " + App.money(a.before.monthly_amount) + " to " +
+             App.money(a.after.monthly_amount) + " for " + what;
+    }
+    return App.cap(String(a.entity).replace(/_/g, " ")) + " " + what;
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,295 @@
+# Raj Sports — coaching manager (web + Android)
+
+Fee, renewal and admission tracking for **Raj Sports**, a coach-operator who
+runs coaching batches at five centres he does not own, across five sports, in
+Hyderabad. Two clients, one backend, one set of rules.
+
+The client's stated priority, in his words: **WhatsApp reminders that never
+give a parent a bad experience.** Everything below is arranged around that.
+
+---
+
+## The shape of the business (do not regress)
+
+- Raj coaches **at other people's venues** — schools, clubs, communities. That
+  is why a *centre* can take a revenue share, and why "rent" and "% of
+  collections" are both first-class payout shapes.
+- **There is NO court booking.** CourtSync is off for this tenant. It is off in
+  three places, deliberately: `tenants.config.modules.booking = false`, no
+  `courts`/`rates` config, and a DB trigger that *rejects* any insert into
+  `bookings` or `integrations` for a booking-disabled tenant. Do not "helpfully"
+  add a booking screen.
+- People are **students** here (not "members" as in the Leo/Machaxi apps) and
+  they have **parents**. Parent contact is the WhatsApp contact.
+
+### The five centres (from the client, verbatim)
+
+| Centre | Days | Batches | Sports |
+|---|---|---|---|
+| DPS Miyapur | Mon–Fri | 3:00–4:30pm, 4:30–6:00pm | archery, basketball, football, cricket, tennis |
+| BTV | Mon/Wed/Fri + Tue/Thu/Sat | 5 batches, 5–8pm | basketball |
+| Pushpak | Mon/Wed/Fri | 5–6pm, 6–7pm | *not stated — sport chosen per student* |
+| Hill County | Tue/Thu/Sat | 5–6pm, 6–7pm | *not stated* |
+| PRC | Mon–Fri | 5–6pm, 6–7pm | *not stated* |
+
+`batches.sport` is **nullable** precisely because three centres run mixed
+batches. Do not make it required.
+
+---
+
+## Architecture
+
+One Supabase project — `ugsklcipzyiogxynshnh`, org "Academy Manager" — shared
+with Leo, Machaxi, MatchPoint and Gen Alpha. Every row carries
+`tenant_id = 'raj'`. New tables are **generic**, not `raj_*`, so the next
+coaching client reuses them.
+
+```
+Raj Sports repo
+├── index.html · login.html · today.html · students.html · student.html
+│   reminders.html · fees.html · setup.html          ← the web app (root = GitHub Pages)
+├── assets/css/app.css                               ← the design system
+├── assets/js/{cloud.js, core.js}                    ← data layer + shell
+├── android-app/                                     ← native Kotlin/Compose
+└── supabase/
+    ├── migration-raj.sql      schema + fee chain + payouts + WhatsApp tables
+    ├── migration-raj-2.sql    public read for the timetable
+    ├── migration-raj-3.sql    integrity guards + audit log + tenant_health
+    ├── cron-raj.sql           the two scheduled jobs
+    ├── sample-data.sql        demo data  (clear-sample-data.sql removes it)
+    ├── test-migration*.sql    behaviour tests, run against live, rolled back
+    └── functions/whatsapp-reminder/  the reminder engine (Deno edge function)
+```
+
+### The rule that keeps two clients honest
+
+**Anything that computes money lives in Postgres.** The fee chain, the renewal
+roll-forward and the payout split are SQL functions called by the web app, the
+Android app *and* the reminder engine. No client does that arithmetic itself.
+That is the only reason a parent's WhatsApp message and the manager's screen
+can never quote different amounts.
+
+If you add a money rule, add it to the database — never to a client.
+
+---
+
+## The fee chain
+
+Most specific wins. `resolve_fee()` is the single resolver.
+
+```
+60  enrollment.custom_amount      "this student pays ₹X"        ← staff override
+50  fee_rule on a member          "this family pays ₹X"
+45  fee_rule on a batch           "the 7 AM batch is ₹X"
+40  fee_rule on centre + sport    "basketball at BTV is ₹X"
+30  fee_rule on sport             "basketball is ₹X anywhere"
+20  fee_rule on centre            "everything at PRC is ₹X"
+10  fee_rule with no scope        the tenant default
+```
+
+- `plan_amounts` jsonb gives a discounted 3/6-month price; missing keys fall
+  back to `monthly_amount × months`.
+- A partial unique index enforces **one active rule per scope** — otherwise the
+  winning fee would depend on row order and the manager could not see which
+  rule applied.
+- `reminder_queue()` resolves through the same chain, and returns
+  `fee_source` so every screen can say *where* the number came from.
+
+**The client has not set real prices yet.** What is loaded is placeholder
+sample data. Replace it in Setup → Fees.
+
+---
+
+## The billing unit is the ENROLLMENT, not the student
+
+A child doing cricket *and* basketball is one `members` row and two
+`enrollments` rows — each with its own fee, its own renewal date, and
+potentially its own coach cut. Never collapse this back to one fee per student.
+
+---
+
+## Payouts — BUILT BUT HIDDEN
+
+The client asked for payouts to come out of the UI for now. The tab is gone
+from Setup and from Fees on both clients, but **the schema, `compute_payouts()`
+and the payout RPCs are all intact and tested** — nothing was dropped. Turning
+it back on is re-adding the tab, not rebuilding the feature. What follows
+documents the model so it can return without being redesigned.
+
+### How a PT master (or a centre) takes a cut
+
+`payout_rules` is a (party × basis) pair, because real contracts take many
+shapes:
+
+| basis | meaning |
+|---|---|
+| `percent` | % of what was collected |
+| `flat_per_student` | ₹X per active student per month |
+| `monthly_retainer` | fixed ₹X/month (a venue rent, say) |
+| `per_session` | ₹X per session actually held (needs `sessions` rows) |
+| `flat_per_payment` | ₹X per payment collected |
+| `slab` | banded by headcount, e.g. 40% up to 20 students then 50% |
+
+`applies_on = 'net_after_centre'` is the common real arrangement: the school
+takes its share of the gross, and the PT master splits **what is left**.
+`compute_payouts()` therefore runs centre rules first. `min_guarantee` and
+`max_cap` wrap the result, so "₹8,000 minimum or 40%, whichever is higher"
+is expressible.
+
+A payout line already marked **paid is never rewritten** by a recompute.
+
+---
+
+## WhatsApp reminders
+
+The ladder (ported from the proven Gen Alpha engine):
+
+```
+-2 days   heads_up   soft nudge before the renewal date
+ 0 days   due        due today
++5 days   overdue    first chase
++7..+14   overdue    daily
++15 and beyond       STOP — manual follow-up only
+```
+
+- Only Meta error **131049** is auto-retried (5/30/60 min). `131026` and
+  everything else means the message will never land — a human has to look.
+  Retrying those just burns the number's reputation.
+- A student is skipped before a reminder is even created if their
+  `whatsapp_status` is `wrong_number` / `opted_out`, if there is no valid
+  10-digit number, or if no fee is set. Each of those surfaces on the
+  **Needs a call** tab with the reason in plain English.
+- `reminder_events` has a partial unique index on `(tenant, enrollment,
+  ist_date)`: one reminder per student per IST day, always.
+
+### Manual mode is first-class, not a stub
+
+`tenants.config.whatsapp.mode` is `manual` until Raj's own WhatsApp Business
+number is approved. In manual mode:
+
+- the daily cron **reports and writes nothing** — a `reminder_events` row must
+  mean "we actually tried to reach this parent", or `tenant_health`'s
+  sent/delivered counters quietly become fiction;
+- the manager taps **WhatsApp** on the Reminders screen, which opens `wa.me`
+  with the message pre-written and logs it via `log_manual_reminder()`.
+
+**The message wording is identical in all three places** —
+`App.reminderText()` (web), `Fmt.reminderText()` (Android) and
+`messageBody()` (edge function). If you change one, change all three. A parent
+must hear one voice from Raj Sports regardless of which path sent it.
+
+Going live is a **config flip, not a deploy**: set `enabled: true`,
+`mode: 'auto'`, `dryRun: false` on `tenants.config.whatsapp` once the WABA,
+the phone number ID and the three approved templates exist.
+
+---
+
+## Adding a sport, a venue, or a batch time
+
+These are routine edits, so the **server** owns the rules — not the UI, which
+is one of two clients and will not always be the newest:
+
+- `add_sport()`, `add_centre()`, `add_batch()`, `update_batch_timing()` are
+  guarded RPCs. They mint a collision-safe code via `next_code()`, reject a
+  duplicate name with a readable message, and validate the timing.
+- Deleting a centre / batch / sport / coach that is **in use is refused** with
+  a message the UI shows verbatim. Deactivate instead.
+- Deactivating a batch **detaches its students** and leaves a note on the
+  enrollment saying why — no student is left pointing at a class that stopped.
+- `update_batch_timing()` writes a dedicated `timing_changed` audit row,
+  because parents plan their week around it.
+
+---
+
+## Observability (what the Academy Manager console sees)
+
+- `audit_log` — append-only, written only by SECURITY DEFINER triggers on every
+  config table, with before/after and the actor's email. No-op writes are
+  ignored so the log stays readable.
+- `events` — page views, `student_added`, `payment_recorded`,
+  `reminder_sent_manual`, `batch_timing_changed`, and **`client_error`**.
+  Both apps install a global error handler; a broken screen is never a silent
+  dead end.
+- `tenant_health('raj')` — one round trip returning roster, money, reminders
+  (sent / delivered / failed / retrying / blocked-by-reason), usage and
+  **config completeness** (students with no fee, students with no phone).
+  Misconfiguration is the quiet failure mode: reminders that never fire because
+  nobody set a price. It is reported as a first-class signal.
+
+---
+
+## Conventions
+
+- **Primary target is the phone.** Verify ≤699px first (375×812), then desktop.
+- **Local dates only.** `toISOString()` is UTC and silently shifts an IST
+  evening back a day, mis-stating a renewal. Web uses `App.isoDate()`, Android
+  uses `Fmt.isoDate()`, Postgres uses `ist_today()`.
+- **Design tokens live in two twinned files**: `assets/css/app.css` and
+  `android-app/.../ui/Theme.kt`. Change one, change both.
+
+### The visual language: "FLOODLIT"
+
+Evening training under stadium lights. A cold near-black field, one hot signal
+colour, and light that moves. Three rules hold it together, and breaking any
+one of them is what would turn it back into a generic dashboard:
+
+1. **Volt is for action only.** The optic lime (`--volt`) never appears in a
+   list row and never states a fact. If something is volt, you can press it or
+   it is where you are. That is the only reason volt can be this loud without
+   fighting the money colours.
+2. **Paid is quiet.** A student who has paid needs no attention, so `--paid` is
+   nearly ink. Colour is spent only on what needs doing, which leaves amber and
+   coral owning the eye by themselves. (Exception: the *Collected* metric uses
+   plain ink, not the muted paid tone. Paid needs no alarm colour; the month's
+   takings still deserve to be readable.)
+3. **One radius system.** Pills for anything pressable, 14px for surfaces, 10px
+   for inputs and chips. Nothing sharp, nothing rounder than its parent.
+
+Also load-bearing: the logo is the **stride mark** (four sheared bars climbing),
+never a monogram in a rounded square. The fixed grain overlay and the single
+floodlight gradient are what stop the flat-vector look; both are `position:
+fixed` and `pointer-events: none` so they never repaint on scroll.
+
+**Zero em-dashes in anything a user reads** (UI copy, WhatsApp messages, toasts,
+errors). Code comments are fine. This is a house rule from the anti-slop design
+skill and the single most common tell.
+
+### Motion
+
+Every animation has a job. Numbers count up once on arrival because the number
+is the news; the nav pill and the tab underline are ONE element that travels,
+because five highlights blinking reads as five things and one thing moving
+reads as your position; a reminder row can be swiped right to open WhatsApp
+with velocity-based commit, because the queue is ten parents and one thumb.
+The only looping animation in the app is the light sweep on the single lead
+card. All of it collapses under `prefers-reduced-motion`.
+- Filters with 3+ options use a dropdown, never a wrapping row of chips.
+  Dense rows use `.status` (dot + coloured text), not filled pills.
+- Bump `?v=N` on every css/js reference in **all** HTML files when assets change.
+- Never present the app as a demo in UI copy.
+
+## Auth
+
+Lockdown is ON. Staff sign in as real Supabase Auth users whose `app_metadata`
+is `{am_role:'staff', tenant_id:'raj'}`. The dummy login for this build is
+`staff@rajsports.in`; the password is in `~/.supabase/am-dummy-logins.txt`.
+Replace it with a real account before handover and strip the dummy.
+
+Anon may read only `centres`, `batches`, `sports` (the public timetable) and
+insert into `applications` (the enrolment form). Nothing with a person or a
+rupee in it is readable without a staff token — `migration-raj-2.sql` asserts
+this rather than trusting the policy text.
+
+## Working on this
+
+```bash
+npx http-server -p 8135 -c-1 .          # the web app
+cd android-app && ./gradlew :app:assembleDebug
+./scripts/dry-run.sh supabase/x.sql     # validate against live, roll back
+./scripts/test-migration.sh             # behaviour tests, roll back
+./scripts/migrate.sh supabase/x.sql     # apply for real
+```
+
+`scripts/dry-run.sh` and `scripts/test-migration*.sh` run the SQL against the
+**real** schema inside a transaction and roll it back. Use them before every
+apply — this database has four other live tenants in it.

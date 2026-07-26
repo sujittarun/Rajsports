@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f6f5f1">
+<title>Sign in · Raj Sports</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="assets/css/app.css?v=2">
+<style>
+  body { padding-bottom: 0; display: grid; place-items: center; min-height: 100svh; }
+  .login { width: min(400px, calc(100vw - 32px)); }
+  .brand { display: flex; align-items: center; gap: 12px; justify-content: center; margin-bottom: 26px; }
+  .brand .mark { width: 42px; height: 42px; }
+  .brand .wordmark b { font-size: 21px; }
+  .brand .wordmark span { font-size: 10px; }
+</style>
+</head>
+<body>
+  <main class="login reveal">
+    <div class="brand" id="brand"></div>
+    <form class="card card-pad" id="form" novalidate>
+      <div class="field">
+        <label for="email">Email</label>
+        <input class="input" id="email" type="email" autocomplete="username"
+               inputmode="email" autocapitalize="off" spellcheck="false" required>
+      </div>
+      <div class="field">
+        <label for="pw">Password</label>
+        <input class="input" id="pw" type="password" autocomplete="current-password" required>
+      </div>
+      <div id="err" class="small hide" style="color:var(--overdue);margin-bottom:12px"></div>
+      <button class="btn btn-primary btn-block" id="go" type="submit">Sign in</button>
+    </form>
+    <p class="small muted mt-2" style="text-align:center">
+      Enrolling a child? <a href="index.html" style="color:var(--volt)">Go to the Raj Sports site</a>
+    </p>
+  </main>
+
+<script src="assets/js/cloud.js?v=2"></script>
+<script src="assets/js/core.js?v=2"></script>
+<script>
+(function () {
+  App.$("#brand").innerHTML = App.markSVG(42) + App.wordmark();
+  var form = App.$("#form"), err = App.$("#err"), go = App.$("#go");
+  if (RS.signedIn()) location.replace(next());
+
+  function next() {
+    var q = new URLSearchParams(location.search).get("next");
+    return (q && /^[a-z-]+\.html$/.test(q)) ? q : "today.html";
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    err.classList.add("hide");
+    var email = App.$("#email").value.trim(), pw = App.$("#pw").value;
+    if (!email || !pw) return;
+    go.disabled = true; go.textContent = "Signing in…";
+    RS.signIn(email, pw)
+      .then(function () { RS.track("sign_in"); location.replace(next()); })
+      .catch(function (e2) {
+        err.textContent = e2.message || "Could not sign in.";
+        err.classList.remove("hide");
+        go.disabled = false; go.textContent = "Sign in";
+      });
+  });
+})();
+</script>
+</body>
+</html>

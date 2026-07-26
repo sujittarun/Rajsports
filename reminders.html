@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f6f5f1">
+<title>Reminders · Raj Sports</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="assets/css/app.css?v=2">
+<style>
+  .mode {
+    display: flex; gap: 11px; align-items: flex-start;
+    padding: 13px 15px; border-radius: var(--r-card); margin: 16px 0 18px;
+    background: var(--raised); border: 1px solid var(--hair);
+    font-size: 12.5px; line-height: 1.55; color: var(--text-2);
+  }
+  .mode b { color: var(--text); font-weight: 660; }
+  .mode-dot {
+    width: 7px; height: 7px; border-radius: 50%; flex: none; margin-top: 6px;
+    background: var(--due); box-shadow: 0 0 10px var(--due);
+  }
+  .mode.is-live .mode-dot { background: var(--volt); box-shadow: 0 0 10px var(--volt); }
+
+  .q-item { border-bottom: 1px solid var(--hair); }
+  .q-item:last-child { border-bottom: 0; }
+  .q-body { padding: 13px 16px 0; display: flex; align-items: center; gap: 12px; }
+  .q-acts { display: flex; gap: 7px; padding: 10px 16px 13px; }
+  .q-acts .btn { flex: 1; min-height: 38px; font-size: 13px; }
+  /* The send action carries more weight than the two fallbacks. */
+  .q-acts .btn-wa { flex: 1.7; }
+  .q-done .q-body, .q-done .q-acts { opacity: 0.42; }
+  .q-why {
+    display: flex; gap: 9px; margin: 11px 16px 0; padding: 10px 12px;
+    background: var(--overdue-haze); color: var(--overdue);
+    border-radius: var(--r-chip); font-size: 12.5px; font-weight: 560; line-height: 1.5;
+  }
+  .q-amt { font-size: 16px; font-weight: 680; }
+  /* Only shown on touch devices, where the gesture exists at all. */
+  .swipe-tip { display: none; font-size: 11.5px; color: var(--text-3); padding: 0 16px 12px; }
+  @media (hover: none) and (pointer: coarse) { .swipe-tip { display: block; } }
+</style>
+</head>
+<body>
+  <header class="topbar"></header>
+
+  <main class="wrap">
+    <div id="mode" class="mode" hidden></div>
+    <div class="metrics section" id="metrics"></div>
+
+    <div class="tabs" role="tablist" id="tabs">
+      <button role="tab" aria-selected="true"  data-tab="queue">To send</button>
+      <button role="tab" aria-selected="false" data-tab="blocked">Needs a call</button>
+      <button role="tab" aria-selected="false" data-tab="history">Sent</button>
+    </div>
+
+    <div class="card"><div id="body"></div></div>
+  </main>
+
+  <nav class="nav"></nav>
+
+<script src="assets/js/cloud.js?v=2"></script>
+<script src="assets/js/core.js?v=2"></script>
+<script>
+(function () {
+  if (!App.requireStaff()) return;
+  App.shell("reminders", "Reminders");
+  RS.track("page_view");
+
+  var body = App.$("#body"), tab = "queue";
+  var queue = [], cfg = {}, sent = {};
+  var placeInk = App.tabInk(App.$("#tabs"));
+
+  App.skeleton(body, 5);
+
+  Promise.all([RS.reminderQueue(), RS.tenantConfig()]).then(function (r) {
+    queue = r[0] || [];
+    cfg = Object.assign({ brand: "Raj Sports" }, r[1] || {});
+    showMode(cfg);
+    render();
+  }).catch(function (e) { App.fail(body, e); });
+
+  function showMode(c) {
+    var wa = c.whatsapp || {};
+    var live = wa.enabled && wa.mode === "auto" && !wa.dryRun;
+    var host = App.$("#mode");
+    host.hidden = false;
+    host.classList.toggle("is-live", !!live);
+    host.innerHTML = '<span class="mode-dot"></span><div>' + (live
+      ? "<b>Sending automatically.</b> Reminders go out every day at " +
+        ((wa.sendHourIST || 15) > 12 ? (wa.sendHourIST - 12) + " PM" : wa.sendHourIST + " AM") +
+        ". You can still send any of these by hand."
+      : "<b>Sending by hand.</b> Swipe a student right, or tap WhatsApp, to open the message " +
+        "already written. Either way it is logged. Automatic sending switches on once the " +
+        "Raj Sports WhatsApp Business number is approved.") + "</div>";
+  }
+
+  function sendable() { return queue.filter(function (r) { return !r.blocked_reason; }); }
+  function blocked()  { return queue.filter(function (r) { return !!r.blocked_reason; }); }
+  function pending()  {
+    return sendable().filter(function (r) { return !r.already_sent && !sent[r.enrollment_id]; });
+  }
+
+  function metrics() {
+    var s = sendable(), b = blocked(), todo = pending();
+    var due = queue.reduce(function (a, r) { return a + (+r.amount || 0); }, 0);
+    App.navBadge(todo.length);
+    App.$("#metrics").innerHTML = [
+      met("To send", todo.length, "right now", todo.length ? "is-due" : "is-paid"),
+      met("Needs a call", b.length, "cannot WhatsApp", b.length ? "is-overdue" : ""),
+      met("Sent", s.length - todo.length, "today", ""),
+      met("At stake", App.money(due), "across " + queue.length + " students", "")
+    ].join("");
+  }
+  function met(k, v, sub, cls) {
+    return '<div class="metric ' + cls + '"><div class="eyebrow">' + App.esc(k) + "</div>" +
+      '<div class="metric-v">' + App.esc(String(v)) + "</div>" +
+      '<div class="metric-s">' + App.esc(sub) + "</div></div>";
+  }
+
+  function render() {
+    metrics();
+    if (tab === "queue")   return renderQueue(sendable(), false);
+    if (tab === "blocked") return renderQueue(blocked(), true);
+    return renderHistory();
+  }
+
+  var WHY = {
+    missing_phone:      "No valid 10 digit parent number saved. Add one on the profile.",
+    wrong_phone_number: "This number is marked wrong. Correct it, then set WhatsApp back to Active.",
+    whatsapp_opted_out: "This parent opted out of WhatsApp. Call them instead.",
+    overdue_15_days:    "More than 15 days overdue. Automatic reminders stop here on purpose, so this one needs a call.",
+    fee_not_set:        "No fee is set for this student. Set a rate in Setup, or a custom amount on the enrollment."
+  };
+
+  function renderQueue(rows, isBlocked) {
+    if (!rows.length) {
+      return App.empty(body,
+        isBlocked ? "Nobody needs a call" : "Nothing to send",
+        isBlocked ? "Every parent due today is reachable on WhatsApp."
+                  : "No fee is due, overdue, or coming up in the next two days.");
+    }
+    body.innerHTML =
+      (isBlocked ? "" : '<div class="swipe-tip">Swipe a student right to open WhatsApp.</div>') +
+      rows.map(item).join("");
+    wire(rows);
+  }
+
+  function item(r, i) {
+    var done = r.already_sent || sent[r.enrollment_id];
+    var sub = [r.centre, r.batch, r.sport ? App.cap(r.sport) : null].filter(Boolean).join(" · ");
+    var late = r.days_since > 0
+      ? r.days_since + (r.days_since === 1 ? " day late" : " days late")
+      : (r.stage === "due" ? "Due today" : "Due in 2 days");
+
+    var inner =
+      '<div class="q-body">' +
+        '<div class="avatar">' + App.esc(App.initials(r.member_name)) + "</div>" +
+        '<div class="row-main">' +
+          '<div class="row-t">' + App.esc(r.member_name) + "</div>" +
+          '<div class="row-s">' + App.esc(sub || "Not assigned") + "</div>" +
+        "</div>" +
+        '<div class="row-end">' +
+          '<div class="q-amt money">' + App.moneyOrDash(r.amount) + "</div>" +
+          '<span class="status ' + (r.days_since > 0 ? "status-overdue" : "status-due") + '">' +
+            App.esc(late) + "</span>" +
+        "</div>" +
+      "</div>" +
+      (r.blocked_reason
+        ? '<div class="q-why"><span>!</span><span>' + App.esc(WHY[r.blocked_reason] || r.blocked_reason) + "</span></div>"
+        : "") +
+      '<div class="q-acts">' +
+        (r.blocked_reason
+          ? (App.telLink(r.phone)
+              ? '<a class="btn btn-primary" href="' + App.telLink(r.phone) + '" data-call>Call parent</a>'
+              : '<button class="btn" disabled>No number</button>') +
+            '<a class="btn" href="student.html?id=' + r.member_id + '">Profile</a>'
+          : '<button class="btn btn-wa" data-wa' + (done ? " disabled" : "") + ">" +
+              (done ? "Sent today" : '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5.1-1.3A10 10 0 1 0 12 2Zm5.3 14.1c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .1-1.7-.1a12 12 0 0 1-5.9-5.1c-.4-.7-.9-1.6-.9-2.4 0-.9.5-1.4.7-1.6.2-.2.4-.3.6-.3h.4c.2 0 .4 0 .6.4l.8 1.9c.1.2 0 .4-.1.5l-.4.5c-.1.1-.3.3-.1.6a8 8 0 0 0 3.6 3.1c.3.1.5.1.6 0l.7-.8c.2-.2.4-.1.6 0l1.8.9c.2.1.4.2.4.3v.9Z"/></svg><span>WhatsApp</span>') + "</button>" +
+            (App.telLink(r.phone) ? '<a class="btn" href="' + App.telLink(r.phone) + '" data-call>Call</a>' : "") +
+            '<button class="btn" data-pay>Paid</button>') +
+      "</div>";
+
+    // Only unblocked rows get the swipe affordance, because a swipe on
+    // a row that cannot be sent would promise something that fails.
+    if (r.blocked_reason) {
+      return '<div class="q-item' + (done ? " q-done" : "") + '" data-e="' + r.enrollment_id + '">' + inner + "</div>";
+    }
+    return '<div class="q-item swipe' + (done ? " q-done" : "") + '" data-e="' + r.enrollment_id + '">' +
+      '<div class="swipe-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M20.5 11.4a8 8 0 0 1-8.6 8 8 8 0 0 1-3.8-1L3.5 20l1.1-4.6a8 8 0 1 1 15.9-4Z"/></svg>' +
+        "<span>Open WhatsApp</span></div>" +
+      '<div class="swipe-face">' + inner + "</div></div>";
+  }
+
+  function wire(rows) {
+    App.$$(".q-item").forEach(function (node) {
+      var id = +node.dataset.e;
+      var r = rows.filter(function (x) { return x.enrollment_id === id; })[0];
+      if (!r) return;
+
+      var wa = App.$("[data-wa]", node);
+      if (wa) wa.addEventListener("click", function () { send(r, node); });
+      if (!r.blocked_reason) {
+        App.swipeRow(node, function () {
+          if (r.already_sent || sent[r.enrollment_id]) return;
+          send(r, node);
+        });
+      }
+
+      var call = App.$("[data-call]", node);
+      if (call) call.addEventListener("click", function () {
+        RS.logManualReminder({
+          enrollment: r.enrollment_id, stage: r.stage, amount: r.amount,
+          phone: r.phone, channel: "call", body: "Called parent"
+        }).catch(function () {});
+      });
+
+      var pay = App.$("[data-pay]", node);
+      if (pay) pay.addEventListener("click", function () { recordPayment(r); });
+    });
+  }
+
+  /* Open WhatsApp with the message already written, and log it in the
+     same gesture. Logged as "sent by staff", never as "delivered":
+     only Meta can tell us a message actually landed. */
+  function send(r, node) {
+    var text = App.reminderText(r, cfg);
+    var link = App.waLink(r.phone, text);
+    if (!link) { App.toast("No valid WhatsApp number for this parent.", "bad"); return; }
+    window.open(link, "_blank", "noopener");
+
+    RS.logManualReminder({
+      enrollment: r.enrollment_id, stage: r.stage, amount: r.amount,
+      phone: r.phone, body: text, channel: "whatsapp"
+    }).then(function () {
+      sent[r.enrollment_id] = true;
+      var btn = App.$("[data-wa]", node);
+      if (btn) { btn.disabled = true; btn.textContent = "Sent today"; }
+      node.classList.add("q-done");
+      metrics();
+      App.toast("Logged for " + r.member_name, "good");
+    }).catch(function (e) {
+      App.toast(e.message || "Opened WhatsApp, but could not log it.", "bad");
+    });
+  }
+
+  function recordPayment(r) {
+    App.sheet({
+      title: "Payment from " + r.member_name,
+      html:
+        '<div class="field"><label>Amount</label>' +
+          '<input class="input" id="amt" type="number" inputmode="numeric" value="' +
+            (r.amount != null ? Math.round(r.amount) : "") + '"></div>' +
+        '<div class="field"><label>Months paid for</label><div class="chips" id="mon">' +
+          [1, 3, 6, 12].map(function (n) {
+            return '<button class="chip" type="button" data-m="' + n + '" aria-pressed="' +
+              (n === (r.months || 1)) + '">' + n + (n === 1 ? " month" : " months") + "</button>";
+          }).join("") + "</div></div>" +
+        '<div class="field"><label>Mode</label><div class="chips" id="mode2">' +
+          ["UPI", "Cash", "Bank"].map(function (x, i) {
+            return '<button class="chip" type="button" data-v="' + x + '" aria-pressed="' +
+              (i === 0) + '">' + x + "</button>"; }).join("") + "</div></div>" +
+        '<div class="field"><label>Reference <span class="hint">optional</span></label>' +
+          '<input class="input" id="ref" placeholder="UTR or cheque number"></div>' +
+        '<button class="btn btn-primary btn-block" id="save">Save payment</button>' +
+        '<p class="small muted mt-1">The renewal date moves forward from today, so paying late ' +
+        'never leaves the student still showing as overdue.</p>',
+      onMount: function (el) {
+        pickOne(el, "#mon", function (v) {
+          RS.feeFor(r.enrollment_id, +v).then(function (f) {
+            if (f && f.amount != null) App.$("#amt", el).value = Math.round(f.amount);
+          }).catch(function () {});
+        });
+        pickOne(el, "#mode2");
+
+        App.$("#save", el).addEventListener("click", function () {
+          var btn = this, amt = Number(App.$("#amt", el).value);
+          if (!amt || amt <= 0) { App.toast("Enter an amount.", "bad"); return; }
+          btn.disabled = true; btn.textContent = "Saving…";
+          RS.recordPayment({
+            enrollment: r.enrollment_id, amount: amt,
+            months: +chosen(el, "#mon", "m"),
+            mode: chosen(el, "#mode2", "v"),
+            ref: App.$("#ref", el).value.trim() || null,
+            kind: "renewal"
+          }).then(function () {
+            App.closeSheet();
+            App.toast(r.member_name + " marked paid", "good");
+            return RS.reminderQueue();
+          }).then(function (q) { queue = q || []; render(); })
+            .catch(function (e) {
+              btn.disabled = false; btn.textContent = "Save payment";
+              App.toast(e.message || "Could not save.", "bad");
+            });
+        });
+      }
+    });
+  }
+
+  function pickOne(el, sel, after) {
+    App.$$(sel + " .chip", el).forEach(function (c) {
+      c.addEventListener("click", function () {
+        App.$$(sel + " .chip", el).forEach(function (x) { x.setAttribute("aria-pressed", "false"); });
+        c.setAttribute("aria-pressed", "true");
+        if (after) after(c.dataset.m || c.dataset.v);
+      });
+    });
+  }
+  function chosen(el, sel, attr) {
+    var on = App.$(sel + ' .chip[aria-pressed="true"]', el);
+    return on ? on.dataset[attr] : null;
+  }
+
+  function renderHistory() {
+    App.skeleton(body, 4);
+    RS.reminderHistory(80).then(function (rows) {
+      if (!rows || !rows.length) {
+        return App.empty(body, "No reminders yet",
+          "Anything you send, by hand or automatically, shows up here.");
+      }
+      var byId = {};
+      queue.forEach(function (q) { byId[q.member_id] = q.member_name; });
+      body.innerHTML = '<div class="list">' + rows.map(function (r, i) {
+        var s = look(r.status);
+        return '<div class="row row-in" style="animation-delay:' + Math.min(i * 30, 260) + 'ms">' +
+          '<div class="row-main"><div class="row-t">' +
+            App.esc(byId[r.member_id] || ("Student #" + (r.member_id || "?"))) + "</div>" +
+          '<div class="row-s">' + App.esc([App.longDate(r.ist_date),
+            r.channel === "call" ? "Phone call" : (r.sent_by === "manual" ? "By staff" : "Automatic"),
+            r.amount ? App.money(r.amount) : null].filter(Boolean).join(" · ")) + "</div></div>" +
+          '<div class="row-end"><span class="status ' + s.cls + '">' + App.esc(s.label) + "</span></div></div>";
+      }).join("") + "</div>";
+    }).catch(function (e) { App.fail(body, e); });
+  }
+
+  function look(s) {
+    if (s === "read")      return { label: "Read", cls: "status-paid" };
+    if (s === "delivered") return { label: "Delivered", cls: "status-paid" };
+    if (s === "resolved")  return { label: "Paid", cls: "status-paid" };
+    if (s === "called")    return { label: "Called", cls: "status-muted" };
+    if (s === "manual_sent" || s === "sent" || s === "accepted") return { label: "Sent", cls: "status-due" };
+    if (s === "failed")    return { label: "Failed", cls: "status-overdue" };
+    if (s === "retry_scheduled") return { label: "Retrying", cls: "status-due" };
+    if (s === "manual_followup") return { label: "Needs a call", cls: "status-overdue" };
+    return { label: App.cap(String(s || "").replace(/_/g, " ")), cls: "status-muted" };
+  }
+
+  App.$$("#tabs button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      App.$$("#tabs button").forEach(function (x) { x.setAttribute("aria-selected", "false"); });
+      b.setAttribute("aria-selected", "true");
+      placeInk();
+      tab = b.dataset.tab;
+      render();
+    });
+  });
+})();
+</script>
+</body>
+</html>

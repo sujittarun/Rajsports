@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f6f5f1">
+<title>Raj Sports, coaching across Hyderabad</title>
+<meta name="description" content="Raj Sports runs coaching batches in archery, basketball, football, cricket and tennis at five centres across Hyderabad. Enrol online.">
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="assets/css/app.css?v=2">
+<style>
+  body { padding-bottom: 0; }
+  .site-top { display: flex; align-items: center; gap: 12px; padding: 20px 0 0; }
+  .site-top .btn { margin-left: auto; }
+
+  /* Asymmetric, not a centred hero over a gradient blob. */
+  .hero { padding: 46px 0 34px; }
+  .hero h1 {
+    font-size: clamp(38px, 11vw, 84px);
+    line-height: 0.94; letter-spacing: -0.045em; font-weight: 720;
+    max-width: 14ch;
+  }
+  .hero h1 em {
+    font-style: normal; color: var(--volt);
+    /* italic-free emphasis in the same family; a second font here
+       would be the amateur move */
+  }
+  .hero p { font-size: 15.5px; color: var(--text-2); max-width: 44ch; margin-top: 18px; }
+  .hero .btn { margin-top: 24px; }
+
+  .sports { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 26px; }
+  .sport {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 8px 14px; border-radius: var(--r-pill);
+    background: var(--surface); border: 1px solid var(--hair);
+    font-size: 13px; font-weight: 600;
+  }
+
+  .centres { display: grid; gap: 12px; }
+  @media (min-width: 760px) { .centres { grid-template-columns: repeat(2, 1fr); } }
+  .centre h3 { font-size: 17px; }
+  .batch {
+    display: flex; justify-content: space-between; gap: 14px;
+    padding: 9px 0; border-top: 1px solid var(--hair); font-size: 13px;
+  }
+  .batch .d { color: var(--text-3); }
+
+  footer {
+    padding: 34px 0; margin-top: 40px;
+    border-top: 1px solid var(--hair); color: var(--text-3); font-size: 12.5px;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .ok { text-align: center; padding: 34px 12px; }
+  .ok .tick {
+    width: 62px; height: 62px; border-radius: 50%; margin: 0 auto 16px;
+    background: var(--volt); color: var(--on-volt);
+    display: grid; place-items: center; font-size: 28px; font-weight: 700;
+    /* scale from 0.9, never 0: nothing in the world appears from nothing */
+    animation: pop 460ms var(--spring) both;
+  }
+  @keyframes pop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="site-top reveal">
+      <span id="mark"></span>
+      <a class="btn btn-primary btn-sm" href="#enrol">Enrol</a>
+    </header>
+
+    <section class="hero reveal">
+      <h1>Coaching that <em>shows up</em>, five days a week.</h1>
+      <p>Five centres across Hyderabad. Archery, basketball, football, cricket and tennis,
+         with the same coach and the same standard at every one.</p>
+      <div class="sports" id="sports"></div>
+      <a class="btn btn-primary" href="#enrol">Enrol a child</a>
+    </section>
+
+    <section class="section reveal">
+      <h2 class="mb-2">Centres and timings</h2>
+      <div class="centres" id="centres"></div>
+    </section>
+
+    <section class="section reveal" id="enrol">
+      <h2 class="mb-2">Enrol</h2>
+      <div class="card card-pad">
+        <div id="formWrap">
+          <p class="small muted">Fill this in and Raj will call you to confirm the batch and the fee.
+             No payment is needed now.</p>
+          <form id="form" novalidate style="margin-top:16px">
+            <div class="field"><label for="n">Child's name</label>
+              <input class="input" id="n" autocapitalize="words" required></div>
+            <div class="grid-2">
+              <div class="field"><label for="pn">Parent's name</label>
+                <input class="input" id="pn" autocapitalize="words"></div>
+              <div class="field"><label for="pp">WhatsApp number</label>
+                <input class="input" id="pp" type="tel" inputmode="numeric" maxlength="10"
+                       placeholder="10 digits" required></div>
+            </div>
+            <div class="grid-2">
+              <div class="field"><label for="ce">Centre</label>
+                <select class="select" id="ce" required><option value="">Choose a centre</option></select></div>
+              <div class="field"><label for="sp">Sport</label>
+                <select class="select" id="sp" required><option value="">Choose a sport</option></select></div>
+            </div>
+            <div class="field"><label for="ba">Batch</label>
+              <select class="select" id="ba"><option value="">Any batch, or not sure yet</option></select></div>
+            <div class="grid-2">
+              <div class="field"><label for="db">Date of birth <span class="hint">optional</span></label>
+                <input class="input" id="db" type="date"></div>
+              <div class="field"><label for="sc">School <span class="hint">optional</span></label>
+                <input class="input" id="sc"></div>
+            </div>
+            <div class="field"><label for="gl">Anything we should know? <span class="hint">optional</span></label>
+              <textarea class="textarea" id="gl" placeholder="Playing experience, injuries, timing preferences"></textarea></div>
+            <div id="err" class="small hide" style="color:var(--overdue);margin-bottom:12px"></div>
+            <button class="btn btn-primary btn-block" id="go" type="submit">Send enrolment request</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <span id="fmark"></span>
+      <span>Hyderabad</span>
+      <a href="login.html" style="margin-left:auto;color:var(--text-2)">Manager sign in</a>
+    </footer>
+  </div>
+
+<script src="assets/js/cloud.js?v=2"></script>
+<script src="assets/js/core.js?v=2"></script>
+<script>
+(function () {
+  RS.track("page_view");
+  App.$("#mark").innerHTML = App.markSVG(34) + "";
+  App.$("#mark").style.cssText = "display:flex;align-items:center;gap:11px";
+  App.$("#mark").insertAdjacentHTML("beforeend", App.wordmark());
+  App.$("#fmark").innerHTML = App.markSVG(20);
+
+  var ref = null;
+
+  RS.reference().then(function (r) {
+    ref = r;
+    var live = ref.centres.filter(function (c) { return c.active; });
+
+    App.$("#sports").innerHTML = ref.sports.filter(function (s) { return s.active; })
+      .map(function (s) {
+        return '<span class="sport">' + App.esc((s.icon || "") + " " + s.name) + "</span>"; }).join("");
+
+    App.$("#centres").innerHTML = live.map(function (c) {
+      var bs = ref.batches.filter(function (b) { return b.centre_id === c.id && b.active; });
+      return '<div class="card card-pad centre"><h3>' + App.esc(c.short_name || c.name) + "</h3>" +
+        '<div class="small muted mb-2">' + bs.length + (bs.length === 1 ? " batch" : " batches") +
+        (c.address ? " · " + App.esc(c.address) : "") + "</div>" +
+        bs.map(function (b) {
+          return '<div class="batch"><span>' + App.esc(b.name) +
+            (b.sport ? " · " + App.esc(App.cap(b.sport)) : "") + "</span>" +
+            '<span class="d nowrap">' + App.esc(App.days(b.days) + " · " +
+              App.timeOf(b.start_time) + " to " + App.timeOf(b.end_time)) + "</span></div>";
+        }).join("") + "</div>";
+    }).join("");
+
+    App.$("#ce").innerHTML = '<option value="">Choose a centre</option>' +
+      live.map(function (c) { return '<option value="' + c.id + '">' +
+        App.esc(c.short_name || c.name) + "</option>"; }).join("");
+    App.$("#sp").innerHTML = '<option value="">Choose a sport</option>' +
+      ref.sports.filter(function (s) { return s.active; }).map(function (s) {
+        return '<option value="' + App.esc(s.code) + '">' + App.esc(s.name) + "</option>"; }).join("");
+  }).catch(function () {
+    App.$("#centres").innerHTML = '<p class="muted">Timings are loading. Please refresh.</p>';
+  });
+
+  /* Narrow the batch list to the chosen centre and sport, so a parent
+     cannot pick a combination that does not exist. */
+  function refreshBatches() {
+    var cid = +App.$("#ce").value, sport = App.$("#sp").value;
+    var opts = (ref ? ref.batches : []).filter(function (b) {
+      return b.centre_id === cid && b.active && (!b.sport || !sport || b.sport === sport);
+    });
+    App.$("#ba").innerHTML = '<option value="">Any batch, or not sure yet</option>' +
+      opts.map(function (b) { return '<option value="' + b.id + '">' +
+        App.esc(b.name + " · " + App.days(b.days) + " · " + App.timeOf(b.start_time) +
+        " to " + App.timeOf(b.end_time)) + "</option>"; }).join("");
+  }
+  App.$("#ce").addEventListener("change", refreshBatches);
+  App.$("#sp").addEventListener("change", refreshBatches);
+
+  App.$("#form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var err = App.$("#err"), go = App.$("#go");
+    err.classList.add("hide");
+    var name = App.$("#n").value.trim();
+    var phone = App.phone10(App.$("#pp").value);
+    var centre = App.$("#ce").value, sport = App.$("#sp").value;
+
+    if (!name)               return bad("Please enter the child's name.");
+    if (phone.length !== 10) return bad("Please enter a 10 digit WhatsApp number.");
+    if (!centre)             return bad("Please choose a centre.");
+    if (!sport)              return bad("Please choose a sport.");
+
+    go.disabled = true; go.textContent = "Sending…";
+    RS.submitApplication({
+      name: name, parent_name: App.$("#pn").value.trim() || null,
+      parent_phone: phone, phone: phone,
+      centre_id: +centre, batch_id: App.$("#ba").value ? +App.$("#ba").value : null,
+      sport: sport, dob: App.$("#db").value || null,
+      school: App.$("#sc").value.trim() || null,
+      goal: App.$("#gl").value.trim() || null, program: sport
+    }).then(function () {
+      RS.track("application_submitted", { sport: sport });
+      App.$("#formWrap").innerHTML =
+        '<div class="ok"><div class="tick">✓</div><h2>Thank you</h2>' +
+        '<p class="muted mt-1">We have your request for <b style="color:var(--text)">' +
+        App.esc(name) + "</b>. Raj will call you on <b style=\"color:var(--text)\">" +
+        App.esc(phone) + "</b> to confirm the batch and the fee.</p></div>";
+    }).catch(function () {
+      go.disabled = false; go.textContent = "Send enrolment request";
+      bad("Could not send that just now. Please try again, or call us.");
+    });
+
+    function bad(m) { err.textContent = m; err.classList.remove("hide"); return false; }
+  });
+})();
+</script>
+</body>
+</html>
