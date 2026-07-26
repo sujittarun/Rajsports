@@ -4,9 +4,16 @@ Student, fee and renewal tracking for **Raj Sports**, Hyderabad — one coach,
 five centres, five sports. A web console and a native Android app over one
 shared backend, built around WhatsApp fee reminders.
 
+**Web console:** https://sujittarun.github.io/Rajsports/
+**Android app:** [download the APK](https://github.com/sujittarun/RajSportsApp/releases/latest) ([source](https://github.com/sujittarun/RajSportsApp))
+
 > **No court booking.** This client coaches at other people's venues, so
 > CourtSync is switched off for this tenant at three levels (config flag,
 > empty court config, and a database trigger that rejects booking rows).
+>
+> **Payouts are built but hidden.** The centre and coach revenue-share model
+> is in the database and tested; it is just not in the UI for now. Bringing it
+> back is re-adding a tab, not rebuilding a feature.
 
 ---
 
@@ -17,7 +24,6 @@ shared backend, built around WhatsApp fee reminders.
 | **Students** | Roster across centres, batches and sports. A child doing two sports is one student with two enrollments — each billed separately. |
 | **Fees** | A rate chain: a tenant default, overridden per sport, per centre, per centre+sport, per batch, per student. Plus a custom amount typed on any one student. |
 | **Reminders** | A daily queue of who owes what, with the amount resolved from that student's own rate. One tap opens WhatsApp with the message written. Parents who can't be messaged are separated out with the reason. |
-| **Payouts** | What each centre keeps and what each PT master earns — percent, per head, retainer, per session, or headcount slabs, with the coach's share optionally taken from what's left after the centre's. |
 | **Admissions** | A public enrolment form feeding a review queue; approving creates the student and the enrollment. |
 | **Observability** | Every config change is audited with before/after and who did it. The Academy Manager console reads a single `tenant_health()` call for roster, money, reminder delivery and misconfiguration. |
 
@@ -44,8 +50,8 @@ index.html          public site: centres, timings, enrolment form
 login.html          staff sign-in
 today.html          the day's one job: who to chase, what came in
 students.html       roster + filters          student.html   one student
-reminders.html      the reminder queue        fees.html      collections + payouts
-setup.html          fees · payouts · centres · sports · coaches · WhatsApp · activity
+reminders.html      the reminder queue        fees.html      collections
+setup.html          fees · centres · sports · WhatsApp · activity
 
 assets/css/app.css        the design system (twinned with the Android theme)
 assets/js/cloud.js        Supabase adapter        core.js   shell + formatting
@@ -95,7 +101,6 @@ update tenants
 - [ ] Set the real fees in **Setup → Fees** (what's loaded is placeholder)
 - [ ] Confirm which sports run at Pushpak, Hill County and PRC — those
       batches are sport-neutral until the client says
-- [ ] Set the real centre and coach payout terms in **Setup → Payouts**
 - [ ] `./scripts/migrate.sh supabase/clear-sample-data.sql` to remove the
       demo students, keeping the real timetable
 - [ ] Replace the dummy staff login with a real account
