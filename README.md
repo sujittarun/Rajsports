@@ -30,15 +30,17 @@ npx http-server -p 8135 -c-1 .        # web app → http://localhost:8135
 Sign in at `/login.html`. The staff account for this build is
 `staff@rajsports.in`; the password is in `~/.supabase/am-dummy-logins.txt`.
 
-```bash
-cd android-app && ./gradlew :app:assembleDebug
-# app/build/outputs/apk/debug/raj-sports-manager.apk
-```
+The Android app lives in its own repo so the APK can be built and shared
+without touching the web deploy:
+**[sujittarun/RajSportsApp](https://github.com/sujittarun/RajSportsApp)**
+· [download the latest APK](https://github.com/sujittarun/RajSportsApp/releases/latest)
 
 ## Layout
 
+Live at **https://sujittarun.github.io/Rajsports/**
+
 ```
-index.html          public site — centres, timings, enrolment form
+index.html          public site: centres, timings, enrolment form
 login.html          staff sign-in
 today.html          the day's one job: who to chase, what came in
 students.html       roster + filters          student.html   one student
@@ -47,7 +49,6 @@ setup.html          fees · payouts · centres · sports · coaches · WhatsApp 
 
 assets/css/app.css        the design system (twinned with the Android theme)
 assets/js/cloud.js        Supabase adapter        core.js   shell + formatting
-android-app/              native Kotlin/Compose, same five tabs
 supabase/                 schema, tests, cron, the reminder engine
 scripts/                  dry-run · test · migrate
 ```

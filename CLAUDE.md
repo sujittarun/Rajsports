@@ -50,7 +50,7 @@ Raj Sports repo
 │   reminders.html · fees.html · setup.html          ← the web app (root = GitHub Pages)
 ├── assets/css/app.css                               ← the design system
 ├── assets/js/{cloud.js, core.js}                    ← data layer + shell
-├── android-app/                                     ← native Kotlin/Compose
+│   (the Android app is a SEPARATE repo: sujittarun/RajSportsApp)
 └── supabase/
     ├── migration-raj.sql      schema + fee chain + payouts + WhatsApp tables
     ├── migration-raj-2.sql    public read for the timetable
@@ -227,28 +227,39 @@ is one of two clients and will not always be the newest:
 - **Design tokens live in two twinned files**: `assets/css/app.css` and
   `android-app/.../ui/Theme.kt`. Change one, change both.
 
-### The visual language: "FLOODLIT"
+### The visual language: "GROUNDS"
 
-Evening training under stadium lights. A cold near-black field, one hot signal
-colour, and light that moves. Three rules hold it together, and breaking any
-one of them is what would turn it back into a generic dashboard:
+Warm paper, deep evergreen, quiet ink. **Light is the default and is not
+system-following**: this app is read outdoors in daylight far more than at
+night, so dark is opt-in. Three rules hold the language together:
 
-1. **Volt is for action only.** The optic lime (`--volt`) never appears in a
-   list row and never states a fact. If something is volt, you can press it or
-   it is where you are. That is the only reason volt can be this loud without
-   fighting the money colours.
+1. **The accent is for action only.** Evergreen (`--volt`, kept as the token
+   name so both twins line up) never appears in a list row and never states a
+   fact. If something is green, you can press it or it is where you are.
 2. **Paid is quiet.** A student who has paid needs no attention, so `--paid` is
-   nearly ink. Colour is spent only on what needs doing, which leaves amber and
-   coral owning the eye by themselves. (Exception: the *Collected* metric uses
-   plain ink, not the muted paid tone. Paid needs no alarm colour; the month's
-   takings still deserve to be readable.)
+   neutral grey. Colour is spent only on what needs doing, which leaves ochre
+   and brick owning the eye by themselves. (Exception: the *Collected* metric
+   uses plain ink. Paid needs no alarm colour; the month's takings still
+   deserve to be readable.)
 3. **One radius system.** Pills for anything pressable, 14px for surfaces, 10px
    for inputs and chips. Nothing sharp, nothing rounder than its parent.
 
-Also load-bearing: the logo is the **stride mark** (four sheared bars climbing),
-never a monogram in a rounded square. The fixed grain overlay and the single
-floodlight gradient are what stop the flat-vector look; both are `position:
-fixed` and `pointer-events: none` so they never repaint on scroll.
+An earlier build used an optic-lime accent on near-black. It was rejected as
+too harsh on the eye. If you are tempted back toward a high-chroma accent,
+remember the screen is read in sunlight between batches, not at a desk.
+
+The logo is the **stride mark** (four sheared bars climbing), never a monogram
+in a rounded square. Grain and the top-of-page warmth are deliberately faint;
+both are `position: fixed` and `pointer-events: none` so they never repaint on
+scroll.
+
+### Choosers are rails, not stacks
+
+Picking a centre, a sport and a batch used to be fifteen full-width cards
+stacked in a sheet. It is now four numbered **one-line horizontal rails**, so
+the whole decision stays on one screen and the running answer (with the
+resolved fee and which rate produced it) sits underneath. Any future
+multi-step choice should follow that shape rather than growing another stack.
 
 **Zero em-dashes in anything a user reads** (UI copy, WhatsApp messages, toasts,
 errors). Code comments are fine. This is a house rule from the anti-slop design
