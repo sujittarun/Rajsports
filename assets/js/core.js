@@ -19,22 +19,51 @@
   var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /* ---------------- brand ----------------
-     Four bars, sheared forward, climbing. Abstract on purpose: a
-     monogram in a rounded square is the default every tool defaults
-     to, and it says nothing about a coach who runs five grounds. */
+     The whistle is the J in RAJ. Its lanyard returns under SPORTS,
+     giving the lockup a coach's signature without adding a separate
+     sports pictogram. Colours follow the active GROUNDS theme. */
+  function brandLogoSVG(width, extraClass) {
+    width = width || 150;
+    return '<svg class="brand-logo' + (extraClass ? " " + extraClass : "") +
+      '" style="width:' + width + 'px" viewBox="0 0 360 176" role="img" ' +
+      'aria-label="Raj Sports">' +
+      '<path class="brand-ink" fill-rule="evenodd" d="' +
+        'M31 30h48c23 0 38 12 38 32 0 15-8 25-23 30l26 28H91L67 93H55v27H31a5 5 0 0 1-5-5V35a5 5 0 0 1 5-5Zm24 20v24h22c11 0 17-4 17-12s-6-12-17-12H55Z"/>' +
+      '<path class="brand-ink" fill-rule="evenodd" d="' +
+        'M133 120h-25l36-84c2-4 5-6 10-6h12c5 0 8 2 10 6l35 84h-26l-8-21h-34l-10 21Zm19-42h17l-8-24h-1l-8 24Z"/>' +
+      '<path class="brand-green" d="' +
+        'M223 37h27v52c0 20-12 33-30 33-17 0-29-11-29-27 0-14 9-24 23-28l3-1 1-24c0-3 2-5 5-5Z"/>' +
+      '<path class="brand-green-dark" d="' +
+        'm250 37 7-6v57c0 18-7 29-20 35 8-8 12-18 12-32l1-54Z"/>' +
+      '<path class="brand-paper" d="m220 32 8-7h26c3 0 4 3 1 5l-8 7h-27Z"/>' +
+      '<path class="brand-seam" d="M248 38v54c0 11-3 19-10 26"/>' +
+      '<circle class="brand-hole" cx="220" cy="92" r="15"/>' +
+      '<path class="brand-accent" d="m250 57 7-5v10l-7 5V57Z"/>' +
+      '<path class="brand-lanyard" d="' +
+        'M253 91c8-3 12 0 11 6-1 4-6 4-8 1 14 0 25 18 25 39 0 20-11 29-30 30-43 3-91-7-142-7-38 0-63 6-79 6"/>' +
+      '<path class="brand-lanyard" d="' +
+        'M31 166c-15 8-25 3-25-4 0-8 11-13 24-9l14 5-13 8Z"/>' +
+      '<rect class="brand-accent" x="41" y="154" width="9" height="9" rx="2"/>' +
+      '<text class="brand-sports" x="27" y="146">SPORTS</text>' +
+    "</svg>";
+  }
+
+  /* The compact whistle mark is reserved for very small placements. */
   function markSVG(size) {
     size = size || 30;
     return '<svg class="mark" style="width:' + size + "px;height:" + size + 'px" ' +
       'viewBox="0 0 48 48" aria-hidden="true">' +
-      '<g transform="skewX(-13) translate(6.5 0)">' +
-        '<rect x="1"  y="30" width="6.5" height="13" rx="3.25"/>' +
-        '<rect x="11" y="23" width="6.5" height="20" rx="3.25"/>' +
-        '<rect x="21" y="16" width="6.5" height="27" rx="3.25"/>' +
-        '<rect x="31" y="6"  width="6.5" height="37" rx="3.25"/>' +
-      "</g></svg>";
+      '<path class="brand-green" d="M18 9h17v20c0 9-6 15-15 15S5 38 5 30c0-7 5-12 12-14l1-1V9Z"/>' +
+      '<path class="brand-green-dark" d="m35 9 5-4v23c0 9-4 14-10 17 3-4 5-9 5-15V9Z"/>' +
+      '<path class="brand-paper" d="m17 7 5-5h17c2 0 2 2 1 3l-5 4H18Z"/>' +
+      '<path class="brand-seam" d="M35 9v21c0 5-2 9-5 12"/>' +
+      '<circle class="brand-hole" cx="20" cy="30" r="7"/>' +
+      '<path class="brand-accent" d="m35 17 5-4v7l-5 4v-7Z"/>' +
+      '<path class="brand-lanyard" d="M38 30c5-2 7 1 5 4-2 2-5 0-4-2 5 1 7 5 7 10"/>' +
+      "</svg>";
   }
   function wordmark() {
-    return '<div class="wordmark"><b>RAJ</b><span>Sports</span></div>';
+    return brandLogoSVG(150);
   }
 
   /* ---------------- theme ---------------- */
@@ -409,7 +438,7 @@
       top.dataset.built = "1";
       top.innerHTML =
         '<div class="topbar-in">' +
-          markSVG(28) +
+          brandLogoSVG(92, "brand-logo--topbar") +
           "<h1>" + esc(title || "Raj Sports") + "</h1>" +
           '<button class="icon-btn" data-theme-toggle aria-label="Switch theme">' +
             (resolved() === "dark" ? "☀" : "☾") + "</button>" +
@@ -487,7 +516,7 @@
 
   window.App = {
     reduced: reduced,
-    markSVG: markSVG, wordmark: wordmark,
+    brandLogoSVG: brandLogoSVG, markSVG: markSVG, wordmark: wordmark,
     setTheme: setTheme, theme: theme, resolvedTheme: resolved,
     isoDate: isoDate, parseDate: parseDate, money: money, moneyOrDash: moneyOrDash,
     shortDate: shortDate, longDate: longDate, timeOf: timeOf, days: days,

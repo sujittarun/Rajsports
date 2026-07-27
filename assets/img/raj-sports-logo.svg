@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 176" role="img" aria-labelledby="title">
+  <title id="title">Raj Sports</title>
+  <style>
+    .ink{fill:#17191a}.green{fill:#14543e}.green-dark{fill:#0e3d2d}
+    .paper{fill:#f6f5f1}.accent{fill:#a9701a}
+    .seam,.hole{fill:none;stroke:#f6f5f1;stroke-linecap:round}
+    .seam{stroke-width:2.2}.hole{stroke-width:4}
+    .lanyard{fill:none;stroke:#14543e;stroke-width:3.6;stroke-linecap:round;stroke-linejoin:round}
+    .sports{fill:#14543e;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:28px;font-weight:650;letter-spacing:12px}
+    @media(prefers-color-scheme:dark){
+      .ink{fill:#f0f1ea}.green{fill:#4aa07a}.green-dark{fill:#3d8967}
+      .paper{fill:#14150f}.accent{fill:#d9a04a}
+      .seam,.hole{stroke:#14150f}.lanyard{stroke:#4aa07a}.sports{fill:#4aa07a}
+    }
+  </style>
+  <path class="ink" fill-rule="evenodd" d="M31 30h48c23 0 38 12 38 32 0 15-8 25-23 30l26 28H91L67 93H55v27H31a5 5 0 0 1-5-5V35a5 5 0 0 1 5-5Zm24 20v24h22c11 0 17-4 17-12s-6-12-17-12H55Z"/>
+  <path class="ink" fill-rule="evenodd" d="M133 120h-25l36-84c2-4 5-6 10-6h12c5 0 8 2 10 6l35 84h-26l-8-21h-34l-10 21Zm19-42h17l-8-24h-1l-8 24Z"/>
+  <path class="green" d="M223 37h27v52c0 20-12 33-30 33-17 0-29-11-29-27 0-14 9-24 23-28l3-1 1-24c0-3 2-5 5-5Z"/>
+  <path class="green-dark" d="m250 37 7-6v57c0 18-7 29-20 35 8-8 12-18 12-32l1-54Z"/>
+  <path class="paper" d="m220 32 8-7h26c3 0 4 3 1 5l-8 7h-27Z"/>
+  <path class="seam" d="M248 38v54c0 11-3 19-10 26"/>
+  <circle class="hole" cx="220" cy="92" r="15"/>
+  <path class="accent" d="m250 57 7-5v10l-7 5V57Z"/>
+  <path class="lanyard" d="M253 91c8-3 12 0 11 6-1 4-6 4-8 1 14 0 25 18 25 39 0 20-11 29-30 30-43 3-91-7-142-7-38 0-63 6-79 6"/>
+  <path class="lanyard" d="M31 166c-15 8-25 3-25-4 0-8 11-13 24-9l14 5-13 8Z"/>
+  <rect class="accent" x="41" y="154" width="9" height="9" rx="2"/>
+  <text class="sports" x="27" y="146">SPORTS</text>
+</svg>

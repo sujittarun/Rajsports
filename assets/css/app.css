@@ -169,21 +169,47 @@ a  { color: inherit; text-decoration: none; }
 }
 
 /* ---------------- brand mark ---------------- */
-/* The stride: four sheared bars climbing. Motion, progress, and the
-   several places he coaches, in a shape that still reads at 16px. */
-.mark { display: block; width: 30px; height: 30px; flex: none; }
-.mark rect { fill: var(--volt); }
-
-.wordmark {
-  display: flex; flex-direction: column; line-height: 1; gap: 2px;
+/* The whistle forms the J. The lanyard returns under SPORTS like a
+   coach's signature, while the compact mark keeps tiny placements clear. */
+.brand-logo {
+  display: block;
+  width: 150px;
+  height: auto;
+  max-width: 100%;
+  flex: none;
+  overflow: visible;
 }
-.wordmark b {
-  font-size: 15px; font-weight: 760; letter-spacing: -0.02em; color: var(--text);
+.brand-ink { fill: var(--text); }
+.brand-green { fill: var(--volt); }
+.brand-green-dark { fill: var(--volt-deep); }
+.brand-paper { fill: var(--void); }
+.brand-seam {
+  fill: none;
+  stroke: var(--void);
+  stroke-width: 2.2;
+  stroke-linecap: round;
 }
-.wordmark span {
-  font-size: 8.5px; font-weight: 620; letter-spacing: 0.26em;
-  text-transform: uppercase; color: var(--text-3);
+.brand-hole {
+  fill: none;
+  stroke: var(--void);
+  stroke-width: 4;
 }
+.brand-accent { fill: var(--due); }
+.brand-lanyard {
+  fill: none;
+  stroke: var(--volt);
+  stroke-width: 3.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.brand-sports {
+  fill: var(--volt);
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 28px;
+  font-weight: 650;
+  letter-spacing: 12px;
+}
+.mark { display: block; width: 30px; height: 30px; flex: none; overflow: visible; }
 
 /* ---------------- top bar ---------------- */
 .topbar {
@@ -202,6 +228,7 @@ a  { color: inherit; text-decoration: none; }
   font-size: 17px; flex: 1; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.brand-logo--topbar { width: 92px; }
 
 .icon-btn {
   width: 36px; height: 36px; flex: none;

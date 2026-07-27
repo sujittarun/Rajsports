@@ -14,7 +14,7 @@
 (function () {
   "use strict";
 
-  var APP_VER = "1";   // keep in step with the ?v= cache-buster in the HTML
+  var APP_VER = "3";   // keep in step with the ?v= cache-buster in the HTML
   var PROJECT = "https://ugsklcipzyiogxynshnh.supabase.co";
   var BASE    = PROJECT + "/rest/v1";
   var AUTH    = PROJECT + "/auth/v1";

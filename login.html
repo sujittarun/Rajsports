@@ -7,14 +7,11 @@
 <title>Sign in · Raj Sports</title>
 <link rel="icon" href="assets/img/favicon.svg">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="assets/css/app.css?v=2">
+<link rel="stylesheet" href="assets/css/app.css?v=3">
 <style>
   body { padding-bottom: 0; display: grid; place-items: center; min-height: 100svh; }
   .login { width: min(400px, calc(100vw - 32px)); }
-  .brand { display: flex; align-items: center; gap: 12px; justify-content: center; margin-bottom: 26px; }
-  .brand .mark { width: 42px; height: 42px; }
-  .brand .wordmark b { font-size: 21px; }
-  .brand .wordmark span { font-size: 10px; }
+  .brand { display: flex; justify-content: center; margin-bottom: 26px; }
 </style>
 </head>
 <body>
@@ -38,11 +35,11 @@
     </p>
   </main>
 
-<script src="assets/js/cloud.js?v=2"></script>
-<script src="assets/js/core.js?v=2"></script>
+<script src="assets/js/cloud.js?v=3"></script>
+<script src="assets/js/core.js?v=3"></script>
 <script>
 (function () {
-  App.$("#brand").innerHTML = App.markSVG(42) + App.wordmark();
+  App.$("#brand").innerHTML = App.brandLogoSVG(224);
   var form = App.$("#form"), err = App.$("#err"), go = App.$("#go");
   if (RS.signedIn()) location.replace(next());
 

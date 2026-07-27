@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title">
+  <title id="title">Raj Sports whistle mark</title>
+  <style>
+    .green{fill:#14543e}.green-dark{fill:#0e3d2d}.paper{fill:#f6f5f1}.accent{fill:#a9701a}
+    .seam,.hole{fill:none;stroke:#f6f5f1;stroke-linecap:round}.seam{stroke-width:2.2}.hole{stroke-width:4}
+    .lanyard{fill:none;stroke:#14543e;stroke-width:3.6;stroke-linecap:round;stroke-linejoin:round}
+    @media(prefers-color-scheme:dark){
+      .green{fill:#4aa07a}.green-dark{fill:#3d8967}.paper{fill:#14150f}.accent{fill:#d9a04a}
+      .seam,.hole{stroke:#14150f}.lanyard{stroke:#4aa07a}
+    }
+  </style>
+  <path class="green" d="M18 9h17v20c0 9-6 15-15 15S5 38 5 30c0-7 5-12 12-14l1-1V9Z"/>
+  <path class="green-dark" d="m35 9 5-4v23c0 9-4 14-10 17 3-4 5-9 5-15V9Z"/>
+  <path class="paper" d="m17 7 5-5h17c2 0 2 2 1 3l-5 4H18Z"/>
+  <path class="seam" d="M35 9v21c0 5-2 9-5 12"/>
+  <circle class="hole" cx="20" cy="30" r="7"/>
+  <path class="accent" d="m35 17 5-4v7l-5 4v-7Z"/>
+  <path class="lanyard" d="M38 30c5-2 7 1 5 4-2 2-5 0-4-2 5 1 7 5 7 10"/>
+</svg>
