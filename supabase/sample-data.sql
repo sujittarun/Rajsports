@@ -152,6 +152,210 @@ begin
     ('raj','Kiara Sethi','Neha Sethi','9876500032','9876500032', v_dps, b_dps1, 'archery','pending','SAMPLE — complete beginner');
 end $$;
 
+-- ---------- expand the roster to 100 realistic students ----------
+-- The first block above keeps a small hand-written set whose dates exercise
+-- exact reminder stages. This block fills the rest of the roster with
+-- deterministic, fictional Hyderabad families. It is safe to rerun: phone
+-- numbers are stable, and it stops as soon as 100 SAMPLE students exist.
+do $$
+declare
+  first_names text[] := array[
+    'Aadhya','Aarush','Advait','Ahana','Akshara','Anay','Anika','Arnav',
+    'Avni','Dhruv','Eesha','Harsh','Ira','Ishita','Jai','Kavya','Krish',
+    'Laksh','Mahi','Manas','Mira','Naksh','Navya','Nihal','Pari','Pranav',
+    'Reyansh','Rhea','Ritvik','Saanvi','Samaira','Shaurya','Siya','Tanay',
+    'Trisha','Varun','Ved','Veda','Vivaan','Yuvaan'
+  ];
+  last_names text[] := array[
+    'Rao','Reddy','Sharma','Nair','Iyer','Patel','Mehta','Kapoor','Kulkarni',
+    'Shetty','Menon','Gupta','Joshi','Khan','Pillai','Verma'
+  ];
+  parent_first_names text[] := array[
+    'Anil','Anitha','Deepa','Farah','Girish','Kiran','Lakshmi','Manoj',
+    'Meena','Neha','Prakash','Priya','Rahul','Ramesh','Sanjay','Sunita'
+  ];
+  schools text[] := array[
+    'Delhi Public School Miyapur','Silver Oaks International School',
+    'Sentia The Global School','Kennedy High Global School',
+    'Vikas The Concept School','The Creek Planet School',
+    'DAV Public School Kukatpally','Meridian School'
+  ];
+  localities text[] := array[
+    'Miyapur','Nizampet','Bachupally','Kondapur','Kukatpally',
+    'Pragathi Nagar','Hafeezpet','Chandanagar'
+  ];
+  mixed_sports text[] := array['archery','basketball','football','cricket','tennis'];
+  plan_options int[] := array[1,1,1,3,3,6,12];
+  renewal_offsets int[] := array[-45,-20,-2,0,5,7,10,14,18,30];
+  sample_count int;
+  seq int := 1;
+  batch_count int;
+  mid bigint;
+  eid bigint;
+  second_eid bigint;
+  phone_text text;
+  student_name text;
+  parent_name_text text;
+  chosen_sport text;
+  member_status text;
+  enrollment_status text;
+  renewal_offset int;
+  joined_days int;
+  chosen_plan int;
+  b record;
+  b2 record;
+begin
+  select count(*) into sample_count
+    from members where tenant_id='raj' and notes='SAMPLE';
+  select count(*) into batch_count
+    from batches where tenant_id='raj' and active;
+
+  if batch_count = 0 then
+    raise exception 'Cannot create sample students without active Raj Sports batches';
+  end if;
+
+  while sample_count < 100 loop
+    phone_text := '9801' || lpad(seq::text, 6, '0');
+
+    if exists (
+      select 1 from members
+       where tenant_id='raj' and (parent_phone=phone_text or phone=phone_text)
+    ) then
+      seq := seq + 1;
+      continue;
+    end if;
+
+    select x.* into b
+      from (
+        select ba.id, ba.centre_id, ba.sport, ba.code,
+               row_number() over (order by c.sort, ba.sort, ba.id) as rn
+          from batches ba
+          join centres c on c.id=ba.centre_id
+         where ba.tenant_id='raj' and ba.active and c.active
+      ) x
+     where x.rn = ((seq - 1) % batch_count) + 1;
+
+    student_name :=
+      first_names[((seq - 1) % array_length(first_names, 1)) + 1] || ' ' ||
+      last_names[(((seq - 1) / array_length(first_names, 1)) %
+                  array_length(last_names, 1)) + 1];
+    parent_name_text :=
+      parent_first_names[((seq + 4) % array_length(parent_first_names, 1)) + 1] || ' ' ||
+      last_names[(((seq - 1) / array_length(first_names, 1)) %
+                  array_length(last_names, 1)) + 1];
+    chosen_sport := coalesce(
+      b.sport,
+      mixed_sports[((seq - 1) % array_length(mixed_sports, 1)) + 1]
+    );
+    chosen_plan := plan_options[((seq - 1) % array_length(plan_options, 1)) + 1];
+    renewal_offset :=
+      renewal_offsets[((seq - 1) % array_length(renewal_offsets, 1)) + 1];
+    joined_days := 35 + ((seq * 17) % 420);
+    member_status := case when seq % 23 = 0 then 'discontinued' else 'active' end;
+    enrollment_status := case when member_status = 'discontinued'
+                              then 'discontinued'
+                              when seq % 19 = 0 then 'paused'
+                              else 'active' end;
+
+    insert into members (
+      tenant_id, name, phone, parent_name, parent_phone, alt_phone,
+      program, joined, status, whatsapp_status, dob, gender, school,
+      grade, address, notes, discontinued_on
+    )
+    values (
+      'raj', student_name, phone_text, parent_name_text, phone_text,
+      case when seq % 9 = 0
+           then '9802' || lpad(seq::text, 6, '0') else null end,
+      chosen_sport, ist_today() - joined_days, member_status,
+      case when seq % 31 = 0 then 'wrong_number'
+           when seq % 37 = 0 then 'opted_out'
+           else 'active' end,
+      make_date(2010 + (seq % 8), 1 + (seq % 12), 1 + (seq % 27)),
+      case when seq % 2 = 0 then 'female' else 'male' end,
+      schools[((seq - 1) % array_length(schools, 1)) + 1],
+      ('Grade ' || (3 + (seq % 8)))::text,
+      (10 + seq)::text || ', ' ||
+        localities[((seq - 1) % array_length(localities, 1)) + 1] ||
+        ', Hyderabad',
+      'SAMPLE',
+      case when member_status='discontinued' then ist_today() - (seq % 20) else null end
+    )
+    returning id into mid;
+
+    insert into enrollments (
+      tenant_id, member_id, centre_id, batch_id, sport, plan_months,
+      custom_amount, joined_on, renewal_on, admission_paid, status,
+      discontinued_on, notes
+    )
+    values (
+      'raj', mid, b.centre_id, b.id, chosen_sport, chosen_plan,
+      case when seq % 17 = 0 then 1500 + ((seq % 4) * 250) else null end,
+      ist_today() - joined_days, ist_today() - renewal_offset,
+      seq % 6 <> 0, enrollment_status,
+      case when enrollment_status='discontinued' then ist_today() - (seq % 20) else null end,
+      'SAMPLE'
+    )
+    returning id into eid;
+
+    -- A historical payment gives Fees realistic volume across six months.
+    insert into payments (
+      tenant_id, name, type, detail, amount, mode, on_date,
+      enrollment_id, member_id, centre_id, sport, months,
+      period_from, period_to, kind, status, ref, note
+    )
+    select
+      'raj', student_name, 'Coaching', chosen_sport,
+      round((f->>'amount')::numeric)::int,
+      (array['UPI','UPI','Cash','Bank'])[((seq - 1) % 4) + 1],
+      least(
+        ist_today(),
+        (date_trunc('month', ist_today()) -
+          make_interval(months => seq % 6) +
+          make_interval(days => seq % 21))::date
+      ),
+      eid, mid, b.centre_id, chosen_sport, chosen_plan,
+      ist_today() - joined_days, ist_today() - renewal_offset,
+      case when seq % 13 = 0 then 'admission' else 'renewal' end,
+      case when seq % 29 = 0 then 'pending_verification' else 'paid' end,
+      case when seq % 4 = 0 then 'SAMPLE-' || lpad(seq::text, 4, '0') else null end,
+      'SAMPLE'
+    from (select enrollment_fee(eid) as f) x
+    where (f->>'amount') is not null;
+
+    -- Every tenth child has another enrollment, proving that billing stays
+    -- attached to the enrollment instead of being collapsed onto the child.
+    if seq % 10 = 0 then
+      select x.* into b2
+        from (
+          select ba.id, ba.centre_id, ba.sport, ba.code,
+                 row_number() over (order by c.sort, ba.sort, ba.id) as rn
+            from batches ba
+            join centres c on c.id=ba.centre_id
+           where ba.tenant_id='raj' and ba.active and c.active
+        ) x
+       where x.rn = ((seq + 4) % batch_count) + 1;
+
+      insert into enrollments (
+        tenant_id, member_id, centre_id, batch_id, sport, plan_months,
+        joined_on, renewal_on, admission_paid, status, notes
+      )
+      values (
+        'raj', mid, b2.centre_id, b2.id,
+        coalesce(
+          b2.sport,
+          mixed_sports[(seq % array_length(mixed_sports, 1)) + 1]
+        ),
+        1, ist_today() - greatest(30, joined_days / 2),
+        ist_today() + 20 + (seq % 20), true, 'active', 'SAMPLE'
+      )
+      returning id into second_eid;
+    end if;
+
+    sample_count := sample_count + 1;
+    seq := seq + 1;
+  end loop;
+end $$;
+
 -- Generate this month's payout lines from the rules above.
 select compute_payouts('raj', date_trunc('month', ist_today())::date);
 

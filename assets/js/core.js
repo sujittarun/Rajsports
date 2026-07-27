@@ -444,7 +444,11 @@
           "<h1>" + esc(title || "Raj Sports") + "</h1>" +
           '<button class="icon-btn" data-theme-toggle aria-label="Switch theme">' +
             (resolved() === "dark" ? "☀" : "☾") + "</button>" +
-          '<button class="icon-btn" data-signout aria-label="Sign out">⏻</button>' +
+          '<button class="icon-btn" data-signout aria-label="Sign out">' +
+            '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+              '<path d="M14 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-3"/>' +
+              '<path d="M10 12h11m-4-4 4 4-4 4"/>' +
+            "</svg></button>" +
         "</div>";
       top.querySelector("[data-theme-toggle]").addEventListener("click", function () {
         setTheme(resolved() === "dark" ? "light" : "dark");

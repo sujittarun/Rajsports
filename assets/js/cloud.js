@@ -101,7 +101,15 @@
   function get(path)        { return req(path); }
   function post(path, body) { return req(path, { method: "POST", body: body, prefer: "return=representation" }); }
   function patch(path, body){ return req(path, { method: "PATCH", body: body, prefer: "return=representation" }); }
-  function del(path)        { return req(path, { method: "DELETE" }); }
+  function del(path) {
+    return req(path, { method: "DELETE", prefer: "return=representation" })
+      .then(function (rows) {
+        if (!rows || !rows.length) {
+          throw new Error("Nothing was deleted. Refresh and try again.");
+        }
+        return rows;
+      });
+  }
   function rpc(fn, args)    { return req("/rpc/" + fn, { method: "POST", body: args || {} }); }
 
   var T = "tenant_id=eq." + TENANT;

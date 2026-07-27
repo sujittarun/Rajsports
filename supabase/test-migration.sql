@@ -21,6 +21,16 @@ declare
   amt      numeric;
   ok       boolean;
 begin
+  -- Keep the test deterministic when the requested SAMPLE roster is loaded.
+  -- The outer transaction restores every live row below on rollback.
+  delete from payouts where tenant_id='raj';
+  delete from reminder_events where tenant_id='raj';
+  delete from payments where tenant_id='raj';
+  delete from enrollments where tenant_id='raj';
+  delete from members where tenant_id='raj';
+  delete from payout_rules where tenant_id='raj';
+  delete from fee_rules where tenant_id='raj';
+
   select id into c_dps from centres where tenant_id='raj' and code='dps-miyapur';
   select id into c_btv from centres where tenant_id='raj' and code='btv';
   select id into b_dps1 from batches where tenant_id='raj' and code='dps-b1';
@@ -210,6 +220,8 @@ begin
   if amt <> 5000 then raise exception 'TEST FAIL: min_guarantee floor should apply, got %', amt; end if;
 
   -- slab: 40% up to 20 students, 50% beyond
+  update payout_rules set active=false
+   where tenant_id='raj' and label='PT master split';
   insert into payout_rules (tenant_id, label, party, coach_id, centre_id, basis, value, slabs)
     values ('raj','Slab split','coach', v_coach, c_dps, 'slab', 0,
             '[{"upto":20,"percent":40},{"upto":null,"percent":50}]'::jsonb);
