@@ -12,7 +12,7 @@
 <style>
   body { padding-bottom: 0; }
   .site-top { display: flex; align-items: center; gap: 12px; padding: 20px 0 0; }
-  .site-top .btn { margin-left: auto; }
+  .site-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
   /* Asymmetric, not a centred hero over a gradient blob. */
   .hero { padding: 46px 0 34px; }
@@ -66,7 +66,10 @@
   <div class="wrap">
     <header class="site-top reveal">
       <span id="mark"></span>
-      <a class="btn btn-primary btn-sm" href="#enrol">Enrol</a>
+      <div class="site-actions">
+        <a class="btn btn-sm" href="login.html">Login</a>
+        <a class="btn btn-primary btn-sm" href="#enrol">Enrol</a>
+      </div>
     </header>
 
     <section class="hero reveal">

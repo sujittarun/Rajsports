@@ -12,12 +12,39 @@
   body { padding-bottom: 0; display: grid; place-items: center; min-height: 100svh; }
   .login { width: min(400px, calc(100vw - 32px)); }
   .brand { display: flex; justify-content: center; margin-bottom: 26px; }
+  .demo-access {
+    padding: 14px; margin-bottom: 18px;
+    border-radius: 12px; border: 1px solid var(--hair);
+    background: var(--sunken);
+  }
+  .demo-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .demo-head strong { display: block; margin-top: 2px; font-size: 14px; }
+  .demo-creds { display: grid; gap: 7px; margin-top: 12px; }
+  .demo-cred { display: grid; grid-template-columns: 68px minmax(0, 1fr); gap: 8px; align-items: center; }
+  .demo-cred span { color: var(--text-3); font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; }
+  .demo-cred code {
+    min-width: 0; overflow-wrap: anywhere;
+    color: var(--text); font: 600 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
 </style>
 </head>
 <body>
   <main class="login reveal">
     <div class="brand" id="brand"></div>
     <form class="card card-pad" id="form" novalidate>
+      <section class="demo-access" aria-label="Demo login details">
+        <div class="demo-head">
+          <div>
+            <span class="eyebrow">Demo access</span>
+            <strong>Raj Sports staff</strong>
+          </div>
+          <button class="btn btn-sm" id="useDemo" type="button">Use details</button>
+        </div>
+        <div class="demo-creds">
+          <div class="demo-cred"><span>Email</span><code>staff@rajsports.in</code></div>
+          <div class="demo-cred"><span>Password</span><code>abhp8FGyKo2wnJhaZiQf</code></div>
+        </div>
+      </section>
       <div class="field">
         <label for="email">Email</label>
         <input class="input" id="email" type="email" autocomplete="username"
@@ -41,6 +68,11 @@
 (function () {
   App.$("#brand").innerHTML = App.brandLogoSVG(224);
   var form = App.$("#form"), err = App.$("#err"), go = App.$("#go");
+  App.$("#useDemo").addEventListener("click", function () {
+    App.$("#email").value = "staff@rajsports.in";
+    App.$("#pw").value = "abhp8FGyKo2wnJhaZiQf";
+    App.$("#email").focus();
+  });
   if (RS.signedIn()) location.replace(next());
 
   function next() {
