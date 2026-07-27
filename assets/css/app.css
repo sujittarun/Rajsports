@@ -264,7 +264,7 @@ a  { color: inherit; text-decoration: none; }
 .nav-in {
   position: relative;
   max-width: 520px; margin: 0 auto; height: var(--nav-h);
-  display: grid; grid-template-columns: repeat(6, 1fr);
+  display: grid; grid-template-columns: repeat(5, 1fr);
 }
 .nav-pill {
   position: absolute; top: 9px; height: calc(var(--nav-h) - 18px);
