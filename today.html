@@ -7,7 +7,7 @@
 <title>Today · Raj Sports</title>
 <link rel="icon" href="assets/img/favicon.svg">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="assets/css/app.css?v=10">
+<link rel="stylesheet" href="assets/css/app.css?v=12">
 </head>
 <body>
   <header class="topbar"></header>
@@ -24,19 +24,18 @@
 
     <div class="metrics section reveal" id="metrics"></div>
 
-    <section class="section reveal">
-      <div class="card">
-        <div class="card-hd"><h2>Today's attendance</h2>
-          <a class="btn btn-sm btn-ghost" href="attendance.html">Open attendance</a></div>
-        <div id="todayAttendance"></div>
-      </div>
-    </section>
-
     <section class="section reveal" id="collectWrap" hidden>
       <div class="card">
         <div class="card-hd"><h2>Collected this month</h2>
           <span class="pill pill-volt" id="collectTotal"></span></div>
         <div class="card-pad" id="collect"></div>
+      </div>
+    </section>
+
+    <section class="section reveal" id="todayAttendanceWrap" hidden>
+      <div class="card">
+        <div class="card-hd"><h2>Attendance to mark</h2></div>
+        <div id="todayAttendance"></div>
       </div>
     </section>
 
@@ -58,8 +57,8 @@
 
   <nav class="nav"></nav>
 
-<script src="assets/js/cloud.js?v=10"></script>
-<script src="assets/js/core.js?v=10"></script>
+<script src="assets/js/cloud.js?v=12"></script>
+<script src="assets/js/core.js?v=12"></script>
 <script>
 (function () {
   if (!App.requireStaff()) return;
@@ -140,23 +139,25 @@
   }
 
   function renderTodayAttendance(ref, history) {
-    var host = App.$("#todayAttendance");
+    var host = App.$("#todayAttendance"), wrap = App.$("#todayAttendanceWrap");
     var d = new Date(), day = (d.getDay() + 6) % 7 + 1;
+    var nowMinutes = d.getHours() * 60 + d.getMinutes();
     var sessions = {};
     history.forEach(function (x) { sessions[x.batch_id] = x; });
     var batches = ref.batches.filter(function (b) {
-      return b.active !== false && b.days && b.days.indexOf(day) >= 0;
+      var p = String(b.end_time || "00:00").split(":");
+      var endMinutes = Number(p[0]) * 60 + Number(p[1]);
+      return b.active !== false && b.days && b.days.indexOf(day) >= 0 &&
+        !sessions[b.id] && nowMinutes >= endMinutes;
     }).sort(function (a, b) { return String(a.start_time).localeCompare(String(b.start_time)); });
-    if (!batches.length) return App.empty(host, "No batches scheduled today");
+    if (!batches.length) { wrap.hidden = true; return; }
+    wrap.hidden = false;
     host.innerHTML = '<div class="list">' + batches.map(function (b) {
-      var c = ref.centreById[b.centre_id] || {}, s = sessions[b.id];
-      var label = !s ? "Not taken" : s.session_status === "cancelled" ? "Not held" :
-        s.present + " present · " + s.absent + " absent";
-      var cls = !s ? "status-overdue" : "status-muted";
+      var c = ref.centreById[b.centre_id] || {};
       return '<a class="row" href="attendance.html?date=' + App.isoDate() + '&batch=' + b.id + '">' +
         '<div class="row-main"><div class="row-t">' + App.esc(c.short_name || c.name || "") + " · " + App.esc(b.name) + '</div>' +
-        '<div class="row-s">' + App.esc(App.timeOf(b.start_time) + " to " + App.timeOf(b.end_time)) + '</div></div>' +
-        '<span class="status ' + cls + '">' + App.esc(label) + '</span></a>';
+        '<div class="row-s">Ended at ' + App.esc(App.timeOf(b.end_time)) + '</div></div>' +
+        '<span class="btn btn-sm btn-primary">Mark now</span></a>';
     }).join("") + "</div>";
   }
   function met(k, v, sub, cls, isMoney) {

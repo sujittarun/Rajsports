@@ -14,7 +14,7 @@
 (function () {
   "use strict";
 
-  var APP_VER = "10";  // keep in step with the ?v= cache-buster in the HTML
+  var APP_VER = "12";  // keep in step with the ?v= cache-buster in the HTML
   var PROJECT = "https://ugsklcipzyiogxynshnh.supabase.co";
   var BASE    = PROJECT + "/rest/v1";
   var AUTH    = PROJECT + "/auth/v1";
@@ -254,6 +254,13 @@
       p_note: a.note || null, p_cancel_reason: a.cancelReason || null
     });
   }
+  function markAttendance(a) {
+    return rpc("mark_attendance", {
+      p_tenant: TENANT, p_batch: a.batch, p_date: a.date,
+      p_enrollment: a.enrollment, p_status: a.status || null,
+      p_reason: a.reason || null
+    });
+  }
   function attendanceHistory(a) {
     a = a || {};
     return rpc("attendance_history", {
@@ -434,6 +441,7 @@
     reminderQueue: reminderQueue, reminderHistory: reminderHistory,
     logManualReminder: logManualReminder, setWhatsappStatus: setWhatsappStatus,
     attendanceRoster: attendanceRoster, saveAttendance: saveAttendance,
+    markAttendance: markAttendance,
     attendanceHistory: attendanceHistory, attendanceDashboard: attendanceDashboard,
     payoutRules: payoutRules, savePayoutRule: savePayoutRule,
     deletePayoutRule: deletePayoutRule, payouts: payouts,

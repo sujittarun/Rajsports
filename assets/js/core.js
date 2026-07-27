@@ -442,7 +442,7 @@
     attendance:'<path d="M5 4h14v16H5z"/><path d="m8 9 2 2 5-5M8 16h8"/>',
     reminders: '<path d="M20.5 11.4a8 8 0 0 1-8.6 8 8 8 0 0 1-3.8-1L3.5 20l1.1-4.6a8 8 0 1 1 15.9-4Z"/>',
     fees:      '<path d="M7 5h9a3.6 3.6 0 0 1 0 7.2H7"/><path d="M7 8.6h11"/><path d="M7 12.2h4.6"/><path d="m11.6 12.2 5.8 7"/>',
-    setup:     '<circle cx="12" cy="12" r="3"/><path d="M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6M18.4 18.4l-1.6-1.6M7.2 7.2 5.6 5.6"/>'
+    setup:     '<path d="M9.5 3h5l.7 2.1 2 .8 2-.9 2.5 4.3-1.7 1.5v2.4l1.7 1.5-2.5 4.3-2-.9-2 .8-.7 2.1h-5l-.7-2.1-2-.8-2 .9-2.5-4.3L4 13.2v-2.4L2.3 9.3 4.8 5l2 .9 2-.8z"/><circle cx="12" cy="12" r="3"/>'
   };
   var TABS = [
     { href: "today.html",     key: "today",     label: "Today" },
@@ -462,6 +462,8 @@
             brandLogoSVG(92, "brand-logo--topbar") +
           "</a>" +
           "<h1>" + esc(title || "Raj Sports") + "</h1>" +
+          '<button class="icon-btn" data-theme-toggle aria-label="Switch theme">' +
+            (resolved() === "dark" ? "☀" : "☾") + "</button>" +
           (active === "setup" ? "" :
             '<a class="icon-btn" href="setup.html" aria-label="Open setup">' +
               '<svg viewBox="0 0 24 24" aria-hidden="true">' + ICONS.setup + "</svg></a>") +
@@ -471,6 +473,10 @@
               '<path d="M10 12h11m-4-4 4 4-4 4"/>' +
             "</svg></button>" +
         "</div>";
+      top.querySelector("[data-theme-toggle]").addEventListener("click", function () {
+        setTheme(resolved() === "dark" ? "light" : "dark");
+        this.textContent = resolved() === "dark" ? "☀" : "☾";
+      });
       top.querySelector("[data-signout]").addEventListener("click", function () {
         RS.signOut();
         location.replace("./");

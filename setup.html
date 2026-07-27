@@ -7,7 +7,7 @@
 <title>Setup · Raj Sports</title>
 <link rel="icon" href="assets/img/favicon.svg">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="assets/css/app.css?v=10">
+<link rel="stylesheet" href="assets/css/app.css?v=12">
 <style>
   body.setup-page { padding-bottom: max(24px, env(safe-area-inset-bottom, 0px)); }
   .setup-wrap { max-width: 760px; }
@@ -40,15 +40,6 @@
   .setup-section-back { display: inline-flex; min-height: 40px; align-items: center; color: var(--volt); font-size: 13px; font-weight: 650; }
   .setup-section-head h1 { margin-top: 9px; font-size: 27px; }
   .setup-section-head p { margin: 7px 0 0; color: var(--text-2); font-size: 13px; line-height: 1.5; }
-  .theme-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .theme-option {
-    min-height: 110px; padding: 18px; text-align: left; color: var(--text);
-    background: var(--raised); border: 1px solid var(--hair-2);
-    border-radius: var(--r-card); font: inherit; cursor: pointer;
-  }
-  .theme-option[aria-pressed="true"] { border-color: var(--volt); box-shadow: inset 0 0 0 1px var(--volt); }
-  .theme-option b { display: block; margin-top: 22px; font-size: 15px; }
-  .theme-option span { display: block; color: var(--text-3); font-size: 12px; margin-top: 2px; }
   .note {
     padding: 13px 15px; border-radius: var(--r-card); margin-bottom: 16px;
     background: var(--raised); border: 1px solid var(--hair);
@@ -78,8 +69,8 @@
     <div id="view"></div>
   </main>
 
-<script src="assets/js/cloud.js?v=10"></script>
-<script src="assets/js/core.js?v=10"></script>
+<script src="assets/js/cloud.js?v=12"></script>
+<script src="assets/js/core.js?v=12"></script>
 <script>
 (function () {
   if (!App.requireStaff()) return;
@@ -87,7 +78,7 @@
   RS.track("page_view");
 
   var view = App.$("#view"), head = App.$("#setupHead"), ref = null;
-  var TABS = ["home", "fees", "centres", "sports", "whatsapp", "appearance", "activity"];
+  var TABS = ["home", "fees", "centres", "sports", "whatsapp", "activity"];
   var tab = (location.hash || "#home").slice(1);
   if (TABS.indexOf(tab) < 0) tab = "home";
 
@@ -107,7 +98,6 @@
       centres: ["Centres, batches & coaches", "Manage venues, class times and who teaches."],
       sports: ["Sports offered", "Choose the sports students can join."],
       whatsapp: ["WhatsApp reminders", "Review the sending mode and parent message setup."],
-      appearance: ["Appearance", "Choose the theme that is easiest to read."],
       activity: ["Activity log", "Review recent setup changes."]
     }[tab];
     sectionHead(info[0], info[1]);
@@ -115,7 +105,6 @@
     if (tab === "centres")  return renderCentres();
     if (tab === "sports")   return renderSports();
     if (tab === "activity") return renderActivity();
-    if (tab === "appearance") return renderAppearance();
     return renderWhatsapp();
   }
   function sectionHead(title, sub) {
@@ -129,7 +118,6 @@
       sports: '<path d="M8 4h8v4a4 4 0 0 1-8 0V4Z"/><path d="M8 6H4v2a4 4 0 0 0 4 4M16 6h4v2a4 4 0 0 1-4 4M12 12v5M8 21h8M9 17h6"/>',
       fees: '<path d="M4 7h11a4 4 0 0 1 0 8H4M4 11h14M4 15h6m0 0 6 6"/>',
       whatsapp: '<path d="M20 11a8 8 0 0 1-12 7l-4 1 1-4a8 8 0 1 1 15-4Z"/><path d="M9 8c1 3 2 4 5 5"/>',
-      appearance: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/>',
       activity: '<path d="M7 4h10v17H7zM9 2h6v4H9zM10 10h5M10 14h5M10 18h4"/>'
     };
     return '<span class="setup-icon"><svg viewBox="0 0 24 24" aria-hidden="true">' + paths[kind] + '</svg></span>';
@@ -158,8 +146,6 @@
       menuRow("fees", "fees", "Fees & plans", "Default rates, exceptions and longer plans", "Loading");
     App.$("#accountMenu").innerHTML =
       menuRow("whatsapp", "whatsapp", "WhatsApp reminders", "Sending mode and parent message setup", "Loading") +
-      menuRow("appearance", "appearance", "Appearance", "Light or dark mode",
-        App.resolvedTheme() === "dark" ? "Dark" : "Light") +
       menuRow("activity", "activity", "Activity log", "Review recent setup changes", "");
     Promise.all([RS.feeRules(), RS.tenantConfig()]).then(function (r) {
       var fee = App.$('a[href="#fees"] .setup-link-state');
@@ -168,16 +154,6 @@
       var w = (r[1] || {}).whatsapp || {};
       if (wa) wa.textContent = w.mode === "auto" ? "Automatic" : "Manual";
     }).catch(function () {});
-  }
-  function renderAppearance() {
-    view.innerHTML = '<div class="card card-pad"><div class="theme-choice">' +
-      '<button class="theme-option" data-theme="light" aria-pressed="' + (App.resolvedTheme() === "light") + '">' +
-        '☀<b>Light</b><span>Best outdoors</span></button>' +
-      '<button class="theme-option" data-theme="dark" aria-pressed="' + (App.resolvedTheme() === "dark") + '">' +
-        '☾<b>Dark</b><span>Lower light</span></button></div></div>';
-    App.$$("[data-theme]", view).forEach(function (b) {
-      b.addEventListener("click", function () { App.setTheme(b.dataset.theme); render(); });
-    });
   }
   function refresh(after) {
     return RS.reference(true).then(function (r) { ref = r; if (after) after(); });
