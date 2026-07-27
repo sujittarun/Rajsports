@@ -7,7 +7,7 @@
 <title>Today · Raj Sports</title>
 <link rel="icon" href="assets/img/favicon.svg">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="assets/css/app.css?v=5">
+<link rel="stylesheet" href="assets/css/app.css?v=6">
 </head>
 <body>
   <header class="topbar"></header>
@@ -50,8 +50,8 @@
 
   <nav class="nav"></nav>
 
-<script src="assets/js/cloud.js?v=5"></script>
-<script src="assets/js/core.js?v=5"></script>
+<script src="assets/js/cloud.js?v=6"></script>
+<script src="assets/js/core.js?v=6"></script>
 <script>
 (function () {
   if (!App.requireStaff()) return;
@@ -195,14 +195,14 @@
     var host = App.$("#apps");
     host.innerHTML = '<div class="list">' + apps.slice(0, 6).map(function (a) {
       var c = ref.centreById[a.centre_id] || {};
-      return '<div class="row" data-a="' + a.id + '">' +
+      return '<div class="row enquiry-row" data-a="' + a.id + '">' +
         '<div class="avatar">' + App.esc(App.initials(a.name)) + "</div>" +
         '<div class="row-main"><div class="row-t">' + App.esc(a.name) + "</div>" +
         '<div class="row-s">' + App.esc([c.short_name, a.sport ? App.cap(a.sport) : null, a.parent_phone]
           .filter(Boolean).join(" · ")) + "</div></div>" +
-        '<div class="row-end btn-row" style="flex-wrap:nowrap">' +
-          '<button class="btn btn-sm btn-primary" data-ok>Approve</button>' +
-          '<button class="btn btn-sm" data-no>Reject</button></div></div>';
+        '<div class="row-end btn-row enquiry-actions">' +
+          '<button type="button" class="btn btn-sm btn-primary" data-ok>Approve</button>' +
+          '<button type="button" class="btn btn-sm" data-no>Reject</button></div></div>';
     }).join("") + "</div>";
 
     App.$$("[data-a]", host).forEach(function (node) {
