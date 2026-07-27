@@ -7,7 +7,7 @@
 <title>Student · Raj Sports</title>
 <link rel="icon" href="assets/img/favicon.svg">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="assets/css/app.css?v=8">
+<link rel="stylesheet" href="assets/css/app.css?v=9">
 <style>
   .hero { display: flex; align-items: center; gap: 15px; padding: 20px 16px 16px; }
   .hero .avatar { width: 56px; height: 56px; border-radius: 18px; font-size: 18px; }
@@ -51,6 +51,8 @@
   .opt-row.is-on { border-color: var(--volt); background: var(--volt-haze); }
   .opt-row b { display: block; font-weight: 640; font-size: 14px; }
   .opt-row span { font-size: 12px; color: var(--text-3); }
+  .student-attendance { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; padding:16px; }
+  .student-attendance .metric { min-width:0; }
 </style>
 </head>
 <body>
@@ -60,14 +62,19 @@
     <a class="btn btn-sm btn-ghost" href="students.html" style="margin:14px 0 4px">‹ All students</a>
     <div class="card section reveal" id="card"></div>
     <section class="section reveal">
+      <div class="card"><div class="card-hd"><h2>Attendance · last 30 days</h2>
+        <a class="btn btn-sm btn-ghost" id="attendanceLink" href="#">Full history</a></div>
+        <div id="attendanceSummary"></div></div>
+    </section>
+    <section class="section reveal">
       <div class="card"><div class="card-hd"><h2>History</h2></div><div id="tl"></div></div>
     </section>
   </main>
 
   <nav class="nav"></nav>
 
-<script src="assets/js/cloud.js?v=8"></script>
-<script src="assets/js/core.js?v=8"></script>
+<script src="assets/js/cloud.js?v=9"></script>
+<script src="assets/js/core.js?v=9"></script>
 <script>
 (function () {
   if (!App.requireStaff()) return;
@@ -91,7 +98,15 @@
         document.title = m.name + " · Raj Sports";
         App.$(".topbar h1").textContent = m.name;
         renderCard();
-        return RS.timeline(id).then(renderTimeline);
+        App.$("#attendanceLink").href = "attendance.html?tab=history&member=" + id;
+        var from = new Date(); from.setDate(from.getDate() - 29);
+        return Promise.all([
+          RS.timeline(id),
+          RS.attendanceDashboard({ from: App.isoDate(from), to: App.isoDate(), member: id })
+        ]).then(function (x) {
+          renderTimeline(x[0]);
+          renderAttendance(x[1] || {});
+        });
       }).catch(function (e) { App.fail(card, e); });
   }
 
@@ -190,6 +205,19 @@
       return '<div class="tl-i ' + cls + '"><div class="tl-t">' + App.esc(t.title) + "</div>" +
         '<div class="tl-s">' + App.esc(when + (t.body ? " · " + t.body : "")) + "</div></div>";
     }).join("") + "</div>";
+  }
+
+  function renderAttendance(dash) {
+    var host = App.$("#attendanceSummary"), s = dash.summary || {};
+    if (!s.sessions) return App.empty(host, "No attendance recorded yet",
+      "Attendance will appear after this student's batch is marked.");
+    host.innerHTML = '<div class="student-attendance">' +
+      '<div class="metric"><div class="eyebrow">Attendance</div><div class="metric-v">' +
+        (s.rate == null ? "No data" : s.rate + "%") + '</div><div class="metric-s">present</div></div>' +
+      '<div class="metric"><div class="eyebrow">Sessions</div><div class="metric-v">' +
+        s.sessions + '</div><div class="metric-s">classes held</div></div>' +
+      '<div class="metric"><div class="eyebrow">Absent</div><div class="metric-v">' +
+        (s.absent || 0) + '</div><div class="metric-s">sessions missed</div></div></div>';
   }
 
   function payFor(eid) {

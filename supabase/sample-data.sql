@@ -356,6 +356,78 @@ begin
   end loop;
 end $$;
 
+-- ---------- 35 days of realistic attendance history ----------
+-- Sessions follow each active batch's real weekday schedule. Cancelled
+-- sessions remain visible in history but never enter attendance rates.
+insert into sessions (
+  tenant_id, batch_id, on_date, coach_id, status, note,
+  scheduled_start, scheduled_end, marked_at, marked_by, cancel_reason, updated_at
+)
+select
+  'raj', b.id, d::date, b.coach_id,
+  case when (b.id + extract(day from d)::int) % 23 = 0
+       then 'cancelled' else 'held' end,
+  'SAMPLE', b.start_time, b.end_time,
+  (d::date + b.end_time) at time zone 'Asia/Kolkata',
+  'sample@rajsports.in',
+  case when (b.id + extract(day from d)::int) % 23 = 0
+       then 'Ground unavailable' else null end,
+  now()
+from batches b
+cross join generate_series(
+  ist_today() - 34, ist_today(), interval '1 day'
+) d
+where b.tenant_id='raj'
+  and b.active
+  and extract(isodow from d)::int = any(b.days)
+  and exists (
+    select 1
+      from enrollments e
+      join members m on m.id=e.member_id
+     where e.tenant_id='raj' and e.batch_id=b.id
+       and e.status='active' and m.notes='SAMPLE'
+       and e.joined_on <= d::date
+  )
+on conflict (tenant_id, batch_id, on_date) do nothing;
+
+insert into attendance_records (
+  tenant_id, session_id, enrollment_id, status,
+  reason, note, marked_at, marked_by, updated_at
+)
+select
+  'raj', s.id, e.id,
+  case
+    -- A few students have a visible absence pattern so follow-up is useful.
+    when e.id % 19 = 0 and extract(day from s.on_date)::int % 2 = 0 then 'absent'
+    when (e.id + extract(day from s.on_date)::int) % 17 = 0 then 'absent'
+    else 'present'
+  end,
+  case
+    when e.id % 19 = 0 and extract(day from s.on_date)::int % 2 = 0
+      then 'Parent did not confirm'
+    when (e.id + extract(day from s.on_date)::int) % 17 = 0
+      then 'Family informed coach'
+    else null
+  end,
+  'SAMPLE', s.marked_at, 'sample@rajsports.in', now()
+from sessions s
+join batches b on b.id=s.batch_id
+join enrollments e
+  on e.tenant_id='raj' and e.batch_id=b.id and e.status='active'
+join members m
+  on m.id=e.member_id and m.tenant_id='raj' and m.notes='SAMPLE'
+where s.tenant_id='raj'
+  and s.note='SAMPLE'
+  and s.status='held'
+  and e.joined_on <= s.on_date
+on conflict (session_id, enrollment_id) do update set
+  status=excluded.status,
+  reason=excluded.reason,
+  note=excluded.note,
+  marked_at=excluded.marked_at,
+  marked_by=excluded.marked_by,
+  updated_at=now();
+
 -- Generate this month's payout lines from the rules above.
 select compute_payouts('raj', date_trunc('month', ist_today())::date);
 
@@ -363,6 +435,9 @@ select 'SAMPLE DATA LOADED' as result,
        (select count(*) from members     where tenant_id='raj' and notes='SAMPLE') as students,
        (select count(*) from enrollments where tenant_id='raj' and notes='SAMPLE') as enrollments,
        (select count(*) from payments    where tenant_id='raj' and note='SAMPLE')  as payments,
+       (select count(*) from sessions    where tenant_id='raj' and note='SAMPLE')  as sessions,
+       (select count(*) from attendance_records
+          where tenant_id='raj' and note='SAMPLE') as attendance_records,
        (select count(*) from fee_rules   where tenant_id='raj' and note='SAMPLE')  as fee_rules,
        (select count(*) from payout_rules where tenant_id='raj' and note='SAMPLE') as payout_rules,
        (select count(*) from applications where tenant_id='raj' and status='pending') as pending_apps;

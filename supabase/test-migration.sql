@@ -28,6 +28,8 @@ begin
   delete from payouts where tenant_id='raj';
   delete from reminder_events where tenant_id='raj';
   delete from payments where tenant_id='raj';
+  delete from attendance_records where tenant_id='raj';
+  delete from sessions where tenant_id='raj';
   delete from enrollments where tenant_id='raj';
   delete from members where tenant_id='raj';
   delete from payout_rules where tenant_id='raj';

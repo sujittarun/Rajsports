@@ -12,6 +12,9 @@
 
 -- Children first: the FKs are ON DELETE CASCADE from members, but being
 -- explicit keeps the counts below honest and the intent readable.
+delete from attendance_records where tenant_id = 'raj' and note = 'SAMPLE';
+delete from sessions where tenant_id = 'raj' and note = 'SAMPLE';
+
 delete from reminder_events where tenant_id = 'raj'
   and member_id in (select id from members where tenant_id='raj' and notes = 'SAMPLE');
 
@@ -39,6 +42,8 @@ select 'SAMPLE DATA CLEARED' as result,
        (select count(*) from members      where tenant_id='raj') as students_left,
        (select count(*) from enrollments  where tenant_id='raj') as enrollments_left,
        (select count(*) from payments     where tenant_id='raj') as payments_left,
+       (select count(*) from attendance_records where tenant_id='raj') as attendance_left,
+       (select count(*) from sessions     where tenant_id='raj') as sessions_left,
        (select count(*) from fee_rules    where tenant_id='raj') as fee_rules_left,
        (select count(*) from payout_rules where tenant_id='raj') as payout_rules_left,
        (select count(*) from centres      where tenant_id='raj') as centres_kept,

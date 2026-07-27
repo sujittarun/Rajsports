@@ -6,7 +6,7 @@
    · Numbers count up ONCE on arrival, because the number is the
      news. Nothing loops except the sweep on the single lead card.
    · The nav indicator and the tab underline are ONE element that
-     travels. Five highlights fading in and out reads as five things
+     travels. Separate highlights fading in and out reads as many things
      blinking; one thing moving reads as your position.
    · Anything the user can drag keeps its velocity, so a flick works
      as well as a deliberate pull.
@@ -439,6 +439,7 @@
   var ICONS = {
     today:     '<path d="M4 11.2 12 4.8l8 6.4V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/>',
     students:  '<circle cx="12" cy="8.2" r="3.6"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/>',
+    attendance:'<path d="M5 4h14v16H5z"/><path d="m8 9 2 2 5-5M8 16h8"/>',
     reminders: '<path d="M20.5 11.4a8 8 0 0 1-8.6 8 8 8 0 0 1-3.8-1L3.5 20l1.1-4.6a8 8 0 1 1 15.9-4Z"/>',
     fees:      '<path d="M7 5h9a3.6 3.6 0 0 1 0 7.2H7"/><path d="M7 8.6h11"/><path d="M7 12.2h4.6"/><path d="m11.6 12.2 5.8 7"/>',
     setup:     '<circle cx="12" cy="12" r="3"/><path d="M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6M18.4 18.4l-1.6-1.6M7.2 7.2 5.6 5.6"/>'
@@ -446,6 +447,7 @@
   var TABS = [
     { href: "today.html",     key: "today",     label: "Today" },
     { href: "students.html",  key: "students",  label: "Students" },
+    { href: "attendance.html",key: "attendance",label: "Attend" },
     { href: "reminders.html", key: "reminders", label: "Reminders" },
     { href: "fees.html",      key: "fees",      label: "Fees" },
     { href: "setup.html",     key: "setup",     label: "Setup" }

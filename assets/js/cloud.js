@@ -14,7 +14,7 @@
 (function () {
   "use strict";
 
-  var APP_VER = "6";   // keep in step with the ?v= cache-buster in the HTML
+  var APP_VER = "9";   // keep in step with the ?v= cache-buster in the HTML
   var PROJECT = "https://ugsklcipzyiogxynshnh.supabase.co";
   var BASE    = PROJECT + "/rest/v1";
   var AUTH    = PROJECT + "/auth/v1";
@@ -241,6 +241,36 @@
     return patch("/members?" + T + "&id=eq." + memberId, { whatsapp_status: status });
   }
 
+  /* ---------------- attendance ---------------- */
+  function attendanceRoster(batch, onDate) {
+    return rpc("attendance_roster", {
+      p_tenant: TENANT, p_batch: batch, p_date: onDate || null
+    });
+  }
+  function saveAttendance(a) {
+    return rpc("save_attendance_session", {
+      p_tenant: TENANT, p_batch: a.batch, p_date: a.date,
+      p_status: a.status || "held", p_rows: a.rows || [],
+      p_note: a.note || null, p_cancel_reason: a.cancelReason || null
+    });
+  }
+  function attendanceHistory(a) {
+    a = a || {};
+    return rpc("attendance_history", {
+      p_tenant: TENANT, p_from: a.from, p_to: a.to,
+      p_centre: a.centre || null, p_batch: a.batch || null,
+      p_member: a.member || null, p_sport: a.sport || null
+    });
+  }
+  function attendanceDashboard(a) {
+    a = a || {};
+    return rpc("attendance_dashboard", {
+      p_tenant: TENANT, p_from: a.from, p_to: a.to,
+      p_centre: a.centre || null, p_batch: a.batch || null,
+      p_member: a.member || null, p_sport: a.sport || null
+    });
+  }
+
   /* ---------------- payouts ---------------- */
   function payoutRules() {
     return get("/payout_rules?" + T + "&select=*&order=party,id");
@@ -403,6 +433,8 @@
     feeFor: feeFor, payments: payments, recordPayment: recordPayment,
     reminderQueue: reminderQueue, reminderHistory: reminderHistory,
     logManualReminder: logManualReminder, setWhatsappStatus: setWhatsappStatus,
+    attendanceRoster: attendanceRoster, saveAttendance: saveAttendance,
+    attendanceHistory: attendanceHistory, attendanceDashboard: attendanceDashboard,
     payoutRules: payoutRules, savePayoutRule: savePayoutRule,
     deletePayoutRule: deletePayoutRule, payouts: payouts,
     computePayouts: computePayouts, markPayoutPaid: markPayoutPaid,

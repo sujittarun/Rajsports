@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f6f5f1">
+<title>Attendance · Raj Sports</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="assets/css/app.css?v=9">
+<style>
+  .attendance-wrap { padding-bottom: 80px; }
+  .filter-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .filter-grid .field { margin:0; }
+  .roll-head { display:flex; align-items:flex-start; gap:12px; padding:15px 16px; border-bottom:1px solid var(--hair); }
+  .roll-head .row-main { flex:1; }
+  .roll-summary { display:flex; gap:14px; color:var(--text-2); font-size:12px; font-variant-numeric:tabular-nums; }
+  .roll-summary b { color:var(--text); font-size:17px; margin-right:3px; }
+  .attendance-row { padding:12px 13px; border-bottom:1px solid var(--hair); }
+  .attendance-row:last-child { border-bottom:0; }
+  .attendance-main { display:flex; align-items:center; gap:10px; min-width:0; }
+  .attendance-main .avatar { flex:none; }
+  .mark-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+  .mark {
+    min-height:42px; border:1px solid var(--hair-2); border-radius:var(--r-pill);
+    background:var(--raised); color:var(--text-2); font:inherit; font-size:13px;
+    font-weight:670; cursor:pointer;
+  }
+  .mark[data-status="present"][aria-pressed="true"] { background:var(--volt); border-color:var(--volt); color:var(--on-volt); }
+  .mark[data-status="absent"][aria-pressed="true"] { background:var(--overdue-haze); border-color:var(--overdue); color:var(--overdue); }
+  .absence-note { margin-top:8px; }
+  .save-dock {
+    position:fixed; z-index:45; left:0; right:0;
+    bottom:calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
+    padding:9px 16px; background:color-mix(in srgb,var(--void) 90%,transparent);
+    border-top:1px solid var(--hair); backdrop-filter:blur(16px);
+  }
+  .save-dock-in { max-width:520px; margin:auto; display:flex; gap:8px; }
+  .save-dock .btn-primary { flex:1; }
+  .history-metrics { grid-template-columns:repeat(3,1fr); }
+  .history-row { display:flex; align-items:center; gap:12px; width:100%; padding:13px 15px; border:0; border-bottom:1px solid var(--hair); background:none; color:inherit; text-align:left; font:inherit; cursor:pointer; }
+  .history-row:last-child { border-bottom:0; }
+  .rate { font-size:18px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .risk-row { display:flex; gap:11px; padding:13px 15px; border-bottom:1px solid var(--hair); }
+  .risk-row:last-child { border-bottom:0; }
+  .risk-signal { color:var(--overdue); font-size:12px; font-weight:650; }
+  .trend { display:flex; align-items:flex-end; gap:8px; height:116px; padding:16px 16px 8px; }
+  .trend-i { flex:1; min-width:20px; display:grid; align-content:end; gap:5px; height:100%; text-align:center; color:var(--text-3); font-size:10px; }
+  .trend-bar { width:100%; min-height:3px; border-radius:5px 5px 2px 2px; background:var(--paid); }
+  .context { padding:10px 13px; border-radius:var(--r-chip); background:var(--volt-haze); color:var(--text-2); font-size:12px; margin-bottom:12px; }
+  @media (min-width:700px) {
+    .filter-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
+    .attendance-row { display:grid; grid-template-columns:minmax(0,1fr) 280px; align-items:center; gap:14px; }
+    .mark-actions { margin:0; }
+    .absence-note { grid-column:2; }
+    .save-dock { left:50%; right:auto; width:560px; transform:translateX(-50%); border:1px solid var(--hair); border-bottom:0; border-radius:var(--r-card) var(--r-card) 0 0; }
+  }
+</style>
+</head>
+<body>
+<header class="topbar"></header>
+<main class="wrap attendance-wrap">
+  <div class="tabs section" id="tabs">
+    <button type="button" data-tab="take" aria-selected="true">Take attendance</button>
+    <button type="button" data-tab="history" aria-selected="false">History and insights</button>
+  </div>
+
+  <section id="takePanel">
+    <div class="card card-pad">
+      <div class="filter-grid">
+        <div class="field"><label>Date</label><input class="input" id="attDate" type="date"></div>
+        <div class="field"><label>Centre</label><select class="select" id="attCentre"></select></div>
+        <div class="field"><label>Batch</label><select class="select" id="attBatch"></select></div>
+        <div class="field"><label>Sport</label><select class="select" id="attSport"></select></div>
+      </div>
+    </div>
+    <section class="section">
+      <div class="card" id="register"></div>
+    </section>
+  </section>
+
+  <section id="historyPanel" hidden>
+    <div class="card card-pad">
+      <div class="filter-grid">
+        <div class="field"><label>Period</label><select class="select" id="histPeriod"><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last year</option></select></div>
+        <div class="field"><label>Centre</label><select class="select" id="histCentre"></select></div>
+        <div class="field"><label>Batch</label><select class="select" id="histBatch"></select></div>
+        <div class="field"><label>Sport</label><select class="select" id="histSport"></select></div>
+      </div>
+    </div>
+    <div id="memberContext" class="context section" hidden></div>
+    <div class="metrics history-metrics section" id="histMetrics"></div>
+    <section class="section"><div class="card"><div class="card-hd"><h2>Attendance trend</h2></div><div id="trend"></div></div></section>
+    <section class="section"><div class="card"><div class="card-hd"><h2>Needs follow-up</h2><span class="small" id="riskCount"></span></div><div id="risks"></div></div></section>
+    <section class="section"><div class="card"><div class="card-hd"><h2>Past sessions</h2></div><div id="sessions"></div></div></section>
+  </section>
+</main>
+<div class="save-dock" id="saveDock" hidden><div class="save-dock-in">
+  <button class="btn btn-sm" id="cancelSession" type="button">Session not held</button>
+  <button class="btn btn-primary" id="saveAttendance" type="button" disabled>Mark every student</button>
+</div></div>
+<nav class="nav"></nav>
+
+<script src="assets/js/cloud.js?v=9"></script>
+<script src="assets/js/core.js?v=9"></script>
+<script>
+(function () {
+  if (!App.requireStaff()) return;
+  App.shell("attendance", "Attendance");
+  RS.track("page_view");
+
+  var q = new URLSearchParams(location.search);
+  var ref, roster = [], marks = {}, memberId = +(q.get("member") || 0), memberName = "";
+  var dateEl=App.$("#attDate"), centreEl=App.$("#attCentre"), batchEl=App.$("#attBatch"), sportEl=App.$("#attSport");
+  var register=App.$("#register"), dock=App.$("#saveDock"), saveBtn=App.$("#saveAttendance");
+  dateEl.value = q.get("date") || App.isoDate();
+  dateEl.max = App.isoDate();
+  App.skeleton(register, 4);
+
+  var placeInk = App.tabInk(App.$("#tabs"));
+  App.$$("#tabs button").forEach(function (b) {
+    b.addEventListener("click", function () { showTab(b.dataset.tab); });
+  });
+
+  RS.reference().then(function (r) {
+    ref = r;
+    fillSelect(centreEl, r.centres, "All centres");
+    fillSelect(App.$("#histCentre"), r.centres, "All centres");
+    fillSports(sportEl, "All sports");
+    fillSports(App.$("#histSport"), "All sports");
+    centreEl.value = q.get("centre") || "";
+    setBatches(centreEl, batchEl, false);
+    chooseInitialBatch();
+    fillHistoryBatches();
+    wireFilters();
+    if (memberId) {
+      RS.student(memberId).then(function (m) {
+        memberName = m ? m.name : "Selected student";
+        var box=App.$("#memberContext"); box.hidden=false;
+        box.innerHTML="Showing attendance for <b>"+App.esc(memberName)+"</b>. <a href=\"attendance.html\" style=\"text-decoration:underline\">Clear student filter</a>";
+      });
+    }
+    if (q.get("tab")==="history" || memberId) showTab("history"); else loadRoster();
+  }).catch(function (e) { App.fail(register,e); });
+
+  function fillSelect(el, rows, all) {
+    el.innerHTML='<option value="">'+all+'</option>'+rows.filter(function(x){return x.active!==false;}).map(function(x){
+      return '<option value="'+x.id+'">'+App.esc(x.short_name||x.name)+'</option>';
+    }).join("");
+  }
+  function fillSports(el, all) {
+    el.innerHTML='<option value="">'+all+'</option>'+ref.sports.filter(function(x){return x.active!==false;}).map(function(x){
+      return '<option value="'+App.esc(x.code)+'">'+App.esc(x.name)+'</option>';
+    }).join("");
+  }
+  function batchLabel(b) {
+    return b.name+" · "+App.timeOf(b.start_time)+" to "+App.timeOf(b.end_time);
+  }
+  function setBatches(cEl,bEl,all) {
+    var keep=bEl.value;
+    var rows=ref.batches.filter(function(b){return b.active!==false&&(!cEl.value||String(b.centre_id)===cEl.value);});
+    bEl.innerHTML=(all?'<option value="">All batches</option>':'')+rows.map(function(b){
+      var c=ref.centreById[b.centre_id]||{}, prefix=all&&!cEl.value?(c.short_name||c.name)+" · ":"";
+      return '<option value="'+b.id+'">'+App.esc(prefix+batchLabel(b))+'</option>';
+    }).join("");
+    if ([].some.call(bEl.options,function(o){return o.value===keep;})) bEl.value=keep;
+  }
+  function chooseInitialBatch() {
+    var wanted=q.get("batch");
+    if (wanted&&[].some.call(batchEl.options,function(o){return o.value===wanted;})) { batchEl.value=wanted; return; }
+    var d=App.parseDate(dateEl.value), day=d?((d.getDay()+6)%7+1):0;
+    var found=ref.batches.filter(function(b){return b.active!==false&&b.days&&b.days.indexOf(day)>=0;})[0];
+    if (found) { centreEl.value=String(found.centre_id); setBatches(centreEl,batchEl,false); batchEl.value=String(found.id); }
+  }
+  function fillHistoryBatches(){ setBatches(App.$("#histCentre"),App.$("#histBatch"),true); }
+  function wireFilters() {
+    dateEl.addEventListener("change",loadRoster);
+    centreEl.addEventListener("change",function(){setBatches(centreEl,batchEl,false);loadRoster();});
+    batchEl.addEventListener("change",loadRoster);
+    sportEl.addEventListener("change",loadRoster);
+    ["histPeriod","histBatch","histSport"].forEach(function(id){App.$("#"+id).addEventListener("change",loadHistory);});
+    App.$("#histCentre").addEventListener("change",function(){fillHistoryBatches();loadHistory();});
+    App.$("#saveAttendance").addEventListener("click",save);
+    App.$("#cancelSession").addEventListener("click",cancelSession);
+  }
+  function showTab(name) {
+    App.$$("#tabs button").forEach(function(b){b.setAttribute("aria-selected",String(b.dataset.tab===name));});
+    App.$("#takePanel").hidden=name!=="take";
+    App.$("#historyPanel").hidden=name!=="history";
+    dock.hidden=name!=="take"||!batchEl.value;
+    requestAnimationFrame(placeInk);
+    if(name==="history") loadHistory();
+  }
+  function loadRoster() {
+    if(!batchEl.value){App.empty(register,"Choose a batch");dock.hidden=true;return;}
+    dock.hidden=false; App.skeleton(register,4); marks={};
+    RS.attendanceRoster(+batchEl.value,dateEl.value).then(function(rows){
+      roster=(rows||[]).filter(function(r){return !sportEl.value||r.sport===sportEl.value;});
+      roster.forEach(function(r){if(r.attendance_status) marks[r.enrollment_id]={status:r.attendance_status,reason:r.reason||""};});
+      renderRoster();
+    }).catch(function(e){App.fail(register,e);dock.hidden=true;});
+  }
+  function renderRoster() {
+    if(!roster.length){App.empty(register,"No students in this batch","Try another batch or sport.");dock.hidden=true;return;}
+    var b=ref.batchById[+batchEl.value]||{}, c=ref.centreById[b.centre_id]||{};
+    var status=roster[0].session_status, saved=roster[0].session_marked_at;
+    register.innerHTML='<div class="roll-head"><div class="row-main"><h2>'+App.esc(c.short_name||c.name||"")+'</h2><div class="row-s">'+App.esc(batchLabel(b))+'</div>'+
+      '<div class="row-s">'+App.esc(App.longDate(dateEl.value))+(saved?" · Saved "+App.relativeTime(saved):"")+'</div></div>'+
+      '<button class="btn btn-sm" id="allPresent" type="button">All present</button></div>'+
+      (status==="cancelled"?'<div class="empty"><div class="empty-t">Session not held</div><div class="small">Mark students below and save to reopen this session.</div></div>':'')+
+      '<div class="roll-head"><div class="roll-summary"><span><b id="pCount">0</b>present</span><span><b id="aCount">0</b>absent</span><span><b id="uCount">0</b>unmarked</span></div></div>'+
+      '<div>'+roster.map(rowHtml).join("")+'</div>';
+    App.$("#allPresent").addEventListener("click",function(){
+      roster.forEach(function(r){marks[r.enrollment_id]={status:"present",reason:""};});renderRoster();
+    });
+    App.$$("[data-mark]",register).forEach(function(btn){btn.addEventListener("click",function(){
+      var id=+btn.dataset.mark, status=btn.dataset.status, old=marks[id]||{};
+      marks[id]={status:status,reason:old.reason||""};renderRoster();
+    });});
+    App.$$("[data-reason]",register).forEach(function(inp){inp.addEventListener("input",function(){marks[+inp.dataset.reason].reason=inp.value;});});
+    updateCounts();
+  }
+  function rowHtml(r) {
+    var m=marks[r.enrollment_id]||{}, sub=[r.parent_name,r.sport?App.cap(r.sport):null].filter(Boolean).join(" · ");
+    return '<div class="attendance-row"><div class="attendance-main"><div class="avatar">'+App.esc(App.initials(r.member_name))+'</div><div class="row-main"><div class="row-t">'+App.esc(r.member_name)+'</div><div class="row-s">'+App.esc(sub)+'</div></div></div>'+
+      '<div class="mark-actions"><button class="mark" data-mark="'+r.enrollment_id+'" data-status="present" aria-pressed="'+(m.status==="present")+'" aria-label="Mark '+App.esc(r.member_name)+' present">✓ Present</button>'+
+      '<button class="mark" data-mark="'+r.enrollment_id+'" data-status="absent" aria-pressed="'+(m.status==="absent")+'" aria-label="Mark '+App.esc(r.member_name)+' absent">× Absent</button></div>'+
+      (m.status==="absent"?'<div class="absence-note"><input class="input" data-reason="'+r.enrollment_id+'" value="'+App.esc(m.reason||"")+'" placeholder="Absence reason, optional" aria-label="Absence reason for '+App.esc(r.member_name)+'"></div>':"")+'</div>';
+  }
+  function updateCounts() {
+    var values=Object.keys(marks).map(function(k){return marks[k].status;});
+    var p=values.filter(function(x){return x==="present";}).length, a=values.filter(function(x){return x==="absent";}).length, u=roster.length-p-a;
+    App.$("#pCount").textContent=p; App.$("#aCount").textContent=a; App.$("#uCount").textContent=u;
+    saveBtn.disabled=u!==0; saveBtn.textContent=u?"Mark every student":"Save attendance · "+p+" present, "+a+" absent";
+  }
+  function save() {
+    saveBtn.disabled=true;saveBtn.textContent="Saving…";
+    RS.saveAttendance({batch:+batchEl.value,date:dateEl.value,status:"held",rows:roster.map(function(r){
+      return {enrollment_id:r.enrollment_id,status:marks[r.enrollment_id].status,reason:marks[r.enrollment_id].reason||null};
+    })}).then(function(){App.toast("Attendance saved","good");RS.track("attendance_saved",{batch:+batchEl.value,date:dateEl.value});loadRoster();})
+      .catch(function(e){App.toast(e.message,"bad");updateCounts();});
+  }
+  function cancelSession() {
+    App.sheet({title:"Session not held",html:'<div class="field"><label>Reason</label><input class="input" id="cancelWhy" placeholder="Rain, holiday, venue unavailable"></div><button class="btn btn-primary btn-block" id="confirmCancel">Save as not held</button>',onMount:function(el){
+      App.$("#confirmCancel",el).addEventListener("click",function(){var why=App.$("#cancelWhy",el).value.trim();if(!why){App.toast("Add a reason.","bad");return;}
+        this.disabled=true;RS.saveAttendance({batch:+batchEl.value,date:dateEl.value,status:"cancelled",cancelReason:why}).then(function(){App.closeSheet();App.toast("Session marked as not held");loadRoster();loadHistory();}).catch(function(e){App.toast(e.message,"bad");});
+      });
+    }});
+  }
+  function loadHistory() {
+    if(!ref)return;
+    var days=+App.$("#histPeriod").value,to=App.isoDate(),d=new Date();d.setDate(d.getDate()-days+1);
+    var opts={from:App.isoDate(d),to:to,centre:+App.$("#histCentre").value||null,batch:+App.$("#histBatch").value||null,sport:App.$("#histSport").value||null,member:memberId||null};
+    App.skeleton(App.$("#sessions"),3);App.skeleton(App.$("#risks"),2);
+    Promise.all([RS.attendanceHistory(opts),RS.attendanceDashboard(opts)]).then(function(r){renderHistory(r[0]||[],r[1]||{});}).catch(function(e){App.fail(App.$("#sessions"),e);});
+  }
+  function renderHistory(rows,dash) {
+    var s=dash.summary||{}, students=dash.students||[], trend=dash.trend||[];
+    App.$("#histMetrics").innerHTML=metric("Attendance",s.rate==null?"No data":s.rate+"%","present across marked sessions")+metric("Sessions",s.sessions||0,"classes held")+metric("Absences",s.absent||0,"student absences");
+    App.$("#trend").innerHTML=trend.length?'<div class="trend">'+trend.map(function(t){var rate=+t.rate||0;return '<div class="trend-i"><span>'+Math.round(rate)+'%</span><div class="trend-bar" style="height:'+Math.max(3,rate)+'%"></div><span>'+App.shortDate(t.week_start)+'</span></div>';}).join("")+'</div>':'<div class="empty"><div class="empty-t">No trend yet</div><div class="small">Saved attendance will appear here.</div></div>';
+    var risks=students.filter(function(x){return x.absence_streak>=2||(+x.rate<75&&x.sessions>=3)||(x.previous_rate!=null&&x.recent_rate!=null&&x.previous_rate-x.recent_rate>=20);});
+    App.$("#riskCount").textContent=risks.length?risks.length+" students":"";
+    App.$("#risks").innerHTML=risks.length?risks.map(function(x){var signal=x.absence_streak>=2?x.absence_streak+" consecutive absences":(+x.rate<75?x.rate+"% attendance":"attendance dropped recently");return '<a class="risk-row" href="student.html?id='+x.member_id+'"><div class="avatar">'+App.esc(App.initials(x.member_name))+'</div><div class="row-main"><div class="row-t">'+App.esc(x.member_name)+'</div><div class="row-s">'+App.esc(x.centre_name+" · "+x.batch_name)+'</div><div class="risk-signal">'+App.esc(signal)+'</div></div><div class="rate">'+(x.rate==null?"":x.rate+"%")+'</div></a>';}).join(""):'<div class="empty"><div class="empty-t">No attendance concerns</div><div class="small">No repeated absences or sharp attendance drops in this period.</div></div>';
+    App.$("#sessions").innerHTML=rows.length?rows.map(function(x){
+      var when=App.longDate(x.on_date)+(x.session_status==="cancelled"?" · Not held":x.marked_at?" · Saved "+App.relativeTime(x.marked_at):"");
+      var result=x.session_status==="cancelled"
+        ? '<span class="status status-muted">Not held</span>'
+        : '<div class="rate">'+(x.attendance_rate==null?"":x.attendance_rate+"%")+'</div><div class="row-s">'+x.present+" present · "+x.absent+" absent</div>";
+      return '<button class="history-row" data-session="'+x.session_id+'" data-date="'+x.on_date+'" data-batch="'+x.batch_id+'"><div class="row-main"><div class="row-t">'+App.esc(x.centre_name+" · "+x.batch_name)+'</div><div class="row-s">'+when+'</div></div><div class="row-end">'+result+'</div></button>';
+    }).join(""):'<div class="empty"><div class="empty-t">No sessions found</div><div class="small">Change the filters or take attendance first.</div></div>';
+    App.$$("[data-session]",App.$("#sessions")).forEach(function(x){x.addEventListener("click",function(){dateEl.value=x.dataset.date;var b=ref.batchById[+x.dataset.batch];centreEl.value=String(b.centre_id);setBatches(centreEl,batchEl,false);batchEl.value=x.dataset.batch;sportEl.value="";showTab("take");loadRoster();});});
+  }
+  function metric(label,value,sub){return '<div class="metric"><div class="eyebrow">'+label+'</div><div class="metric-v">'+value+'</div><div class="metric-s">'+sub+'</div></div>';}
+})();
+</script>
+</body>
+</html>

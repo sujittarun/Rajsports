@@ -251,8 +251,8 @@ a  { color: inherit; text-decoration: none; }
 
 /* ---------------- bottom nav ----------------
    The volt indicator is ONE element that slides between tabs on a
-   spring. Five separate highlights that fade in and out would read as
-   five things blinking; one thing that moves reads as your position. */
+   spring. Separate highlights that fade in and out would read as many
+   things blinking; one thing that moves reads as your position. */
 .nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
   padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -264,7 +264,7 @@ a  { color: inherit; text-decoration: none; }
 .nav-in {
   position: relative;
   max-width: 520px; margin: 0 auto; height: var(--nav-h);
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-template-columns: repeat(6, 1fr);
 }
 .nav-pill {
   position: absolute; top: 9px; height: calc(var(--nav-h) - 18px);
