@@ -228,6 +228,8 @@ a  { color: inherit; text-decoration: none; }
   font-size: 17px; flex: 1; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.topbar-brand { display: block; flex: none; border-radius: 6px; }
+.topbar-brand:focus-visible { outline: 2px solid var(--volt); outline-offset: 2px; }
 .brand-logo--topbar { width: 92px; }
 
 .icon-btn {

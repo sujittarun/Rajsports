@@ -438,7 +438,9 @@
       top.dataset.built = "1";
       top.innerHTML =
         '<div class="topbar-in">' +
-          brandLogoSVG(92, "brand-logo--topbar") +
+          '<a class="topbar-brand" href="today.html" aria-label="Go to Today">' +
+            brandLogoSVG(92, "brand-logo--topbar") +
+          "</a>" +
           "<h1>" + esc(title || "Raj Sports") + "</h1>" +
           '<button class="icon-btn" data-theme-toggle aria-label="Switch theme">' +
             (resolved() === "dark" ? "☀" : "☾") + "</button>" +
@@ -450,7 +452,7 @@
       });
       top.querySelector("[data-signout]").addEventListener("click", function () {
         RS.signOut();
-        location.replace("login.html?logged_out=1");
+        location.replace("./");
       });
     }
 
