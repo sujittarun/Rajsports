@@ -40,9 +40,20 @@
   .risk-row { display:flex; gap:11px; padding:13px 15px; border-bottom:1px solid var(--hair); }
   .risk-row:last-child { border-bottom:0; }
   .risk-signal { color:var(--overdue); font-size:12px; font-weight:650; }
-  .trend { display:flex; align-items:flex-end; gap:8px; height:116px; padding:16px 16px 8px; }
-  .trend-i { flex:1; min-width:20px; display:grid; align-content:end; gap:5px; height:100%; text-align:center; color:var(--text-3); font-size:10px; }
-  .trend-bar { width:100%; min-height:3px; border-radius:5px 5px 2px 2px; background:var(--paid); }
+  .trend { padding:14px 16px 12px; }
+  .trend-summary { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:8px; }
+  .trend-summary .eyebrow { display:block; color:var(--text-3); font-size:10px; letter-spacing:.1em; text-transform:uppercase; }
+  .trend-latest { display:block; margin-top:2px; color:var(--text); font-size:27px; font-weight:720; line-height:1; font-variant-numeric:tabular-nums; }
+  .trend-change { color:var(--text-2); font-size:12px; }
+  .trend-chart { display:block; width:100%; height:auto; overflow:visible; }
+  .trend-guide { stroke:var(--hair-2); stroke-width:1; stroke-dasharray:5 5; }
+  .trend-line { fill:none; stroke:var(--text-2); stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
+  .trend-area { fill:var(--hair); opacity:.7; }
+  .trend-dot { fill:var(--raised); stroke:var(--text-2); stroke-width:2.5; }
+  .trend-dot-latest { fill:var(--text); stroke:var(--text); }
+  .trend-value { fill:var(--text-2); font-size:11px; font-weight:650; text-anchor:middle; }
+  .trend-date { fill:var(--text-3); font-size:10px; text-anchor:middle; }
+  .trend-guide-label { fill:var(--text-3); font-size:9px; text-anchor:end; }
   .context { padding:10px 13px; border-radius:var(--r-chip); background:var(--volt-haze); color:var(--text-2); font-size:12px; margin-bottom:12px; }
   @media (min-width:700px) {
     .filter-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
@@ -268,7 +279,7 @@
   function renderHistory(rows,dash) {
     var s=dash.summary||{}, students=dash.students||[], trend=dash.trend||[];
     App.$("#histMetrics").innerHTML=metric("Attendance",s.rate==null?"No data":s.rate+"%","present across marked sessions")+metric("Sessions",s.sessions||0,"classes held")+metric("Absences",s.absent||0,"student absences");
-    App.$("#trend").innerHTML=trend.length?'<div class="trend">'+trend.map(function(t){var rate=+t.rate||0;return '<div class="trend-i"><span>'+Math.round(rate)+'%</span><div class="trend-bar" style="height:'+Math.max(3,rate)+'%"></div><span>'+App.shortDate(t.week_start)+'</span></div>';}).join("")+'</div>':'<div class="empty"><div class="empty-t">No trend yet</div><div class="small">Saved attendance will appear here.</div></div>';
+    App.$("#trend").innerHTML=trend.length?trendHtml(trend):'<div class="empty"><div class="empty-t">No trend yet</div><div class="small">Saved attendance will appear here.</div></div>';
     var risks=students.filter(function(x){return x.absence_streak>=2||(+x.rate<75&&x.sessions>=3)||(x.previous_rate!=null&&x.recent_rate!=null&&x.previous_rate-x.recent_rate>=20);});
     App.$("#riskCount").textContent=risks.length?risks.length+" students":"";
     App.$("#risks").innerHTML=risks.length?risks.map(function(x){var signal=x.absence_streak>=2?x.absence_streak+" consecutive absences":(+x.rate<75?x.rate+"% attendance":"attendance dropped recently");return '<a class="risk-row" href="student.html?id='+x.member_id+'"><div class="avatar">'+App.esc(App.initials(x.member_name))+'</div><div class="row-main"><div class="row-t">'+App.esc(x.member_name)+'</div><div class="row-s">'+App.esc(x.centre_name+" · "+x.batch_name)+'</div><div class="risk-signal">'+App.esc(signal)+'</div></div><div class="rate">'+(x.rate==null?"":x.rate+"%")+'</div></a>';}).join(""):'<div class="empty"><div class="empty-t">No attendance concerns</div><div class="small">No repeated absences or sharp attendance drops in this period.</div></div>';
@@ -280,6 +291,28 @@
       return '<button class="history-row" data-session="'+x.session_id+'" data-date="'+x.on_date+'" data-batch="'+x.batch_id+'"><div class="row-main"><div class="row-t">'+App.esc(x.centre_name+" · "+x.batch_name)+'</div><div class="row-s">'+when+'</div></div><div class="row-end">'+result+'</div></button>';
     }).join(""):'<div class="empty"><div class="empty-t">No sessions found</div><div class="small">Change the filters or take attendance first.</div></div>';
     App.$$("[data-session]",App.$("#sessions")).forEach(function(x){x.addEventListener("click",function(){dateEl.value=x.dataset.date;var b=ref.batchById[+x.dataset.batch];centreEl.value=String(b.centre_id);setBatches(centreEl,batchEl,false);batchEl.value=x.dataset.batch;sportEl.value="";showTab("take");loadRoster();});});
+  }
+  function trendHtml(rows) {
+    var points=rows.map(function(t){return {date:t.week_start,rate:Math.max(0,Math.min(100,+t.rate||0))};});
+    var width=600, top=27, bottom=90, left=25, right=20;
+    var x=function(i){return points.length===1?width/2:left+i*((width-left-right)/(points.length-1));};
+    var y=function(rate){return top+(100-Math.max(50,rate))*(bottom-top)/50;};
+    var line=points.map(function(p,i){return x(i).toFixed(1)+","+y(p.rate).toFixed(1);}).join(" ");
+    var area=x(0).toFixed(1)+","+bottom+" "+line+" "+x(points.length-1).toFixed(1)+","+bottom;
+    var latest=points[points.length-1], previous=points.length>1?points[points.length-2]:null;
+    var delta=previous?Math.round(latest.rate-previous.rate):0;
+    var change=!previous?"First recorded week":delta===0?"Steady from last week":(delta>0?"Up ":"Down ")+Math.abs(delta)+" point"+(Math.abs(delta)===1?"":"s")+" from last week";
+    var guideY=y(75).toFixed(1);
+    var chart='<svg class="trend-chart" viewBox="0 0 '+width+' 125" role="img" aria-label="Weekly attendance trend. Latest '+Math.round(latest.rate)+' percent.">'+
+      '<line class="trend-guide" x1="'+left+'" y1="'+guideY+'" x2="'+(width-right)+'" y2="'+guideY+'"></line>'+
+      '<text class="trend-guide-label" x="'+(width-right)+'" y="'+(+guideY-5)+'">75% reference</text>'+
+      '<polygon class="trend-area" points="'+area+'"></polygon>'+
+      '<polyline class="trend-line" points="'+line+'"></polyline>'+
+      points.map(function(p,i){return '<text class="trend-value" x="'+x(i)+'" y="'+(y(p.rate)-10)+'">'+Math.round(p.rate)+'%</text>'+
+        '<circle class="trend-dot '+(i===points.length-1?'trend-dot-latest':'')+'" cx="'+x(i)+'" cy="'+y(p.rate)+'" r="'+(i===points.length-1?5:4)+'"></circle>'+
+        '<text class="trend-date" x="'+x(i)+'" y="116">'+App.esc(App.shortDate(p.date))+'</text>';}).join("")+
+      '</svg>';
+    return '<div class="trend"><div class="trend-summary"><div><span class="eyebrow">Latest week</span><strong class="trend-latest">'+Math.round(latest.rate)+'%</strong></div><span class="trend-change">'+App.esc(change)+'</span></div>'+chart+'</div>';
   }
   function metric(label,value,sub){return '<div class="metric"><div class="eyebrow">'+label+'</div><div class="metric-v">'+value+'</div><div class="metric-s">'+sub+'</div></div>';}
 })();
