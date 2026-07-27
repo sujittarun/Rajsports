@@ -449,7 +449,8 @@
         this.textContent = resolved() === "dark" ? "☀" : "☾";
       });
       top.querySelector("[data-signout]").addEventListener("click", function () {
-        RS.signOut(); location.href = "login.html";
+        RS.signOut();
+        location.replace("login.html?logged_out=1");
       });
     }
 
