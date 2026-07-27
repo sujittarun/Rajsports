@@ -121,6 +121,25 @@
     var d = parseDate(s);
     return d ? d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "";
   }
+  function relativeTime(value) {
+    var then = new Date(value);
+    if (!value || isNaN(then.getTime())) return "";
+    var now = new Date();
+    var seconds = Math.max(0, Math.floor((now.getTime() - then.getTime()) / 1000));
+    if (seconds < 60) return "just now";
+    var minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return minutes + (minutes === 1 ? " min ago" : " mins ago");
+    var hours = Math.floor(minutes / 60);
+    if (hours < 24) return hours + (hours === 1 ? " hr ago" : " hrs ago");
+    var yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    if (then.getFullYear() === yesterday.getFullYear() &&
+        then.getMonth() === yesterday.getMonth() &&
+        then.getDate() === yesterday.getDate()) return "yesterday";
+    var daysAgo = Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate()) -
+                              new Date(then.getFullYear(), then.getMonth(), then.getDate())) / 86400000);
+    if (daysAgo < 7) return daysAgo + " days ago";
+    return then.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  }
   function timeOf(t) {
     if (!t) return "";
     var p = String(t).split(":"), h = +p[0], m = p[1];
@@ -526,7 +545,7 @@
     brandLogoSVG: brandLogoSVG, markSVG: markSVG, wordmark: wordmark,
     setTheme: setTheme, theme: theme, resolvedTheme: resolved,
     isoDate: isoDate, parseDate: parseDate, money: money, moneyOrDash: moneyOrDash,
-    shortDate: shortDate, longDate: longDate, timeOf: timeOf, days: days,
+    shortDate: shortDate, longDate: longDate, relativeTime: relativeTime, timeOf: timeOf, days: days,
     initials: initials, daysBetween: daysBetween, esc: esc, cap: cap,
     phone10: phone10, waNumber: waNumber, waLink: waLink, telLink: telLink,
     feeState: feeState, reminderText: reminderText,

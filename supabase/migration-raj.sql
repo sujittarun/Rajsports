@@ -853,7 +853,8 @@ create index if not exists wa_webhook_events_msg_idx on wa_webhook_events (messa
 --   +7..+14  overdue       daily
 --   +15 and beyond         STOP — manual follow-up only
 -- ------------------------------------------------------------
-create or replace function reminder_queue(p_tenant text, p_on date default null)
+drop function if exists reminder_queue(text, date);
+create function reminder_queue(p_tenant text, p_on date default null)
   returns table (
     enrollment_id bigint,
     member_id     bigint,
@@ -871,7 +872,10 @@ create or replace function reminder_queue(p_tenant text, p_on date default null)
     fee_source    text,
     whatsapp_status text,
     blocked_reason text,
-    already_sent  boolean
+    already_sent  boolean,
+    last_sent_at  timestamptz,
+    last_sent_status text,
+    last_sent_channel text
   )
   language sql stable security definer set search_path = public as $$
   with today as (select coalesce(p_on, ist_today()) as d),
@@ -916,14 +920,20 @@ create or replace function reminder_queue(p_tenant text, p_on date default null)
       when (base.fee->>'amount') is null         then 'fee_not_set'
       else null
     end as blocked_reason,
-    exists (
-      select 1 from reminder_events r
-       where r.tenant_id = p_tenant
-         and r.enrollment_id = base.enrollment_id
-         and r.ist_date = (select d from today)
-         and r.status <> 'void'
-    ) as already_sent
+    coalesce(last_reminder.ist_date = (select d from today), false) as already_sent,
+    last_reminder.created_at as last_sent_at,
+    last_reminder.status as last_sent_status,
+    last_reminder.channel as last_sent_channel
   from base
+  left join lateral (
+    select r.created_at, r.status, r.channel, r.ist_date
+      from reminder_events r
+     where r.tenant_id = p_tenant
+       and r.enrollment_id = base.enrollment_id
+       and r.status <> 'void'
+     order by r.created_at desc
+     limit 1
+  ) last_reminder on true
   where base.days_since = -2          -- heads-up
      or base.days_since = 0           -- due today
      or base.days_since = 5           -- first chase

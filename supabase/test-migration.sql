@@ -20,6 +20,8 @@ declare
   n        int;
   amt      numeric;
   ok       boolean;
+  sent_at  timestamptz;
+  channel  text;
 begin
   -- Keep the test deterministic when the requested SAMPLE roster is loaded.
   -- The outer transaction restores every live row below on rollback.
@@ -241,12 +243,19 @@ begin
   raise notice 'OK  payouts — a paid line is immutable on recompute';
 
   -- ---------- MANUAL SEND ----------
+  update enrollments set renewal_on=ist_today()-8 where id=e_b;
   perform log_manual_reminder('raj', e_b, 'overdue', 3000, '9876500002', 'Sent by hand', 'whatsapp');
   select count(*) into n from reminder_events where enrollment_id=e_b and sent_by='manual';
   if n <> 1 then raise exception 'TEST FAIL: manual reminder not logged'; end if;
   select count(*) into n from member_timeline where member_id=m_b and kind='reminder';
   if n <> 1 then raise exception 'TEST FAIL: manual reminder missing from timeline'; end if;
-  raise notice 'OK  manual send — logged to reminder_events, flow events and timeline';
+  select q.already_sent, q.last_sent_at, q.last_sent_channel
+    into ok, sent_at, channel
+    from reminder_queue('raj') q where q.enrollment_id=e_b;
+  if not ok or sent_at is null or channel <> 'whatsapp' then
+    raise exception 'TEST FAIL: queue missing latest reminder state';
+  end if;
+  raise notice 'OK  manual send — logged once with latest contact time in the queue';
 
   -- ---------- COURTSYNC IS OFF ----------
   begin

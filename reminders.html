@@ -7,7 +7,7 @@
 <title>Reminders · Raj Sports</title>
 <link rel="icon" href="assets/img/favicon.svg">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="assets/css/app.css?v=7">
+<link rel="stylesheet" href="assets/css/app.css?v=8">
 <style>
   .mode {
     display: flex; gap: 11px; align-items: flex-start;
@@ -30,6 +30,11 @@
   /* The send action carries more weight than the two fallbacks. */
   .q-acts .btn-wa { flex: 1.7; }
   .q-done .q-body, .q-done .q-acts { opacity: 0.42; }
+  .q-last {
+    margin: 9px 16px 0; color: var(--text-3);
+    font-size: 12px; font-weight: 620;
+  }
+  .q-last.is-today { color: var(--text-2); }
   .q-why {
     display: flex; gap: 9px; margin: 11px 16px 0; padding: 10px 12px;
     background: var(--overdue-haze); color: var(--overdue);
@@ -59,8 +64,8 @@
 
   <nav class="nav"></nav>
 
-<script src="assets/js/cloud.js?v=7"></script>
-<script src="assets/js/core.js?v=7"></script>
+<script src="assets/js/cloud.js?v=8"></script>
+<script src="assets/js/core.js?v=8"></script>
 <script>
 (function () {
   if (!App.requireStaff()) return;
@@ -100,6 +105,28 @@
   function pending()  {
     return sendable().filter(function (r) { return !r.already_sent && !sent[r.enrollment_id]; });
   }
+  function lastSentAt(r) {
+    return sent[r.enrollment_id] || r.last_sent_at || null;
+  }
+  function sentVerb(r) {
+    return r.last_sent_channel === "call" ? "Called" : "Sent";
+  }
+  function lastSentText(r, done) {
+    var at = lastSentAt(r);
+    if (!at) return "";
+    return (done ? sentVerb(r) : "Last " + sentVerb(r).toLowerCase()) +
+      " " + App.relativeTime(at);
+  }
+  function refreshRelativeLabels() {
+    App.$$(".q-item").forEach(function (node) {
+      var id = +node.dataset.e;
+      var r = queue.filter(function (x) { return x.enrollment_id === id; })[0];
+      var label = App.$("[data-last-sent]", node);
+      if (r && label) label.textContent = lastSentText(r, r.already_sent || sent[id]);
+    });
+  }
+  var relativeTimer = window.setInterval(refreshRelativeLabels, 60000);
+  window.addEventListener("pagehide", function () { window.clearInterval(relativeTimer); });
 
   function metrics() {
     var s = sendable(), b = blocked(), todo = pending();
@@ -148,6 +175,7 @@
 
   function item(r, i) {
     var done = r.already_sent || sent[r.enrollment_id];
+    var lastText = lastSentText(r, done);
     var sub = [r.centre, r.batch, r.sport ? App.cap(r.sport) : null].filter(Boolean).join(" · ");
     var late = r.days_since > 0
       ? r.days_since + (r.days_since === 1 ? " day late" : " days late")
@@ -166,6 +194,10 @@
             App.esc(late) + "</span>" +
         "</div>" +
       "</div>" +
+      (lastText
+        ? '<div class="q-last' + (done ? " is-today" : "") + '" data-last-sent>' +
+            App.esc(lastText) + "</div>"
+        : "") +
       (r.blocked_reason
         ? '<div class="q-why"><span>!</span><span>' + App.esc(WHY[r.blocked_reason] || r.blocked_reason) + "</span></div>"
         : "") +
@@ -176,7 +208,7 @@
               : '<button class="btn" disabled>No number</button>') +
             '<a class="btn" href="student.html?id=' + r.member_id + '">Profile</a>'
           : '<button class="btn btn-wa" data-wa' + (done ? " disabled" : "") + ">" +
-              (done ? "Sent today" : '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5.1-1.3A10 10 0 1 0 12 2Zm5.3 14.1c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .1-1.7-.1a12 12 0 0 1-5.9-5.1c-.4-.7-.9-1.6-.9-2.4 0-.9.5-1.4.7-1.6.2-.2.4-.3.6-.3h.4c.2 0 .4 0 .6.4l.8 1.9c.1.2 0 .4-.1.5l-.4.5c-.1.1-.3.3-.1.6a8 8 0 0 0 3.6 3.1c.3.1.5.1.6 0l.7-.8c.2-.2.4-.1.6 0l1.8.9c.2.1.4.2.4.3v.9Z"/></svg><span>WhatsApp</span>') + "</button>" +
+              (done ? (sentVerb(r) + " today") : '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5.1-1.3A10 10 0 1 0 12 2Zm5.3 14.1c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .1-1.7-.1a12 12 0 0 1-5.9-5.1c-.4-.7-.9-1.6-.9-2.4 0-.9.5-1.4.7-1.6.2-.2.4-.3.6-.3h.4c.2 0 .4 0 .6.4l.8 1.9c.1.2 0 .4-.1.5l-.4.5c-.1.1-.3.3-.1.6a8 8 0 0 0 3.6 3.1c.3.1.5.1.6 0l.7-.8c.2-.2.4-.1.6 0l1.8.9c.2.1.4.2.4.3v.9Z"/></svg><span>WhatsApp</span>') + "</button>" +
             (App.telLink(r.phone) ? '<a class="btn" href="' + App.telLink(r.phone) + '" data-call>Call</a>' : "") +
             '<button class="btn" data-pay>Paid</button>') +
       "</div>";
@@ -229,20 +261,57 @@
     var text = App.reminderText(r, cfg);
     var link = App.waLink(r.phone, text);
     if (!link) { App.toast("No valid WhatsApp number for this parent.", "bad"); return; }
-    window.open(link, "_blank", "noopener");
+    var popup = window.open("about:blank", "_blank");
+    if (!popup) {
+      App.toast("Allow popups so the app can open WhatsApp.", "bad");
+      return;
+    }
+    popup.opener = null;
+    var btn = App.$("[data-wa]", node);
+    var btnHtml = btn ? btn.innerHTML : "";
+    if (btn) { btn.disabled = true; btn.textContent = "Checking…"; }
 
     RS.logManualReminder({
       enrollment: r.enrollment_id, stage: r.stage, amount: r.amount,
       phone: r.phone, body: text, channel: "whatsapp"
     }).then(function () {
-      sent[r.enrollment_id] = true;
-      var btn = App.$("[data-wa]", node);
+      var now = new Date().toISOString();
+      sent[r.enrollment_id] = now;
+      r.already_sent = true;
+      r.last_sent_at = now;
+      r.last_sent_channel = "whatsapp";
       if (btn) { btn.disabled = true; btn.textContent = "Sent today"; }
+      var last = App.$("[data-last-sent]", node);
+      if (!last) {
+        last = App.el('<div class="q-last is-today" data-last-sent></div>');
+        node.querySelector(".q-body").insertAdjacentElement("afterend", last);
+      }
+      last.textContent = "Sent just now";
       node.classList.add("q-done");
       metrics();
       App.toast("Logged for " + r.member_name, "good");
+      popup.location.replace(link);
     }).catch(function (e) {
-      App.toast(e.message || "Opened WhatsApp, but could not log it.", "bad");
+      popup.close();
+      RS.reminderQueue().then(function (fresh) {
+        var latest = (fresh || []).filter(function (x) {
+          return x.enrollment_id === r.enrollment_id;
+        })[0];
+        if (latest && latest.already_sent) {
+          queue = fresh;
+          render();
+          App.toast("Already sent today. The duplicate was stopped.", "good");
+          return;
+        }
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = btnHtml;
+        }
+        App.toast(e.message || "Could not log this reminder.", "bad");
+      }).catch(function () {
+        if (btn) { btn.disabled = false; btn.innerHTML = btnHtml; }
+        App.toast(e.message || "Could not log this reminder.", "bad");
+      });
     });
   }
 
@@ -327,7 +396,7 @@
         return '<div class="row row-in" style="animation-delay:' + Math.min(i * 30, 260) + 'ms">' +
           '<div class="row-main"><div class="row-t">' +
             App.esc(byId[r.member_id] || ("Student #" + (r.member_id || "?"))) + "</div>" +
-          '<div class="row-s">' + App.esc([App.longDate(r.ist_date),
+          '<div class="row-s">' + App.esc([App.relativeTime(r.created_at) || App.longDate(r.ist_date),
             r.channel === "call" ? "Phone call" : (r.sent_by === "manual" ? "By staff" : "Automatic"),
             r.amount ? App.money(r.amount) : null].filter(Boolean).join(" · ")) + "</div></div>" +
           '<div class="row-end"><span class="status ' + s.cls + '">' + App.esc(s.label) + "</span></div></div>";
