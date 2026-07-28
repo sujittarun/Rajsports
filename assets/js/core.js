@@ -544,6 +544,20 @@
       (sub ? '<div class="small">' + esc(sub) + "</div>" : "") + "</div>";
   }
 
+  /* A timeline entry's money comes from meta.amount and is formatted
+     HERE, by the same money() every other screen uses. Older rows were
+     written with the figure baked into the title, so those are shown
+     as-is rather than rewritten. */
+  function timelineLine(t) {
+    var meta = t.meta || {};
+    var bits = [];
+    if (meta.amount != null) bits.push(money(meta.amount));
+    if (meta.months)  bits.push(meta.months + (meta.months === 1 ? " month" : " months"));
+    if (meta.mode)    bits.push(meta.mode);
+    if (t.body)       bits.push(t.body);
+    return { title: t.title, detail: bits.join(" · ") };
+  }
+
   window.App = {
     reduced: reduced,
     brandLogoSVG: brandLogoSVG, markSVG: markSVG, wordmark: wordmark,
@@ -552,7 +566,7 @@
     shortDate: shortDate, longDate: longDate, relativeTime: relativeTime, timeOf: timeOf, days: days,
     initials: initials, daysBetween: daysBetween, esc: esc, cap: cap,
     phone10: phone10, waNumber: waNumber, waLink: waLink, telLink: telLink,
-    feeState: feeState, reminderText: reminderText,
+    feeState: feeState, reminderText: reminderText, timelineLine: timelineLine,
     countUp: countUp, countMoney: countMoney,
     swipeRow: swipeRow, tabInk: tabInk, navBadge: navBadge,
     toast: toast, sheet: sheet, closeSheet: closeSheet, confirm: confirmSheet,

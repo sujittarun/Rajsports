@@ -14,7 +14,7 @@
 (function () {
   "use strict";
 
-  var APP_VER = "12";  // keep in step with the ?v= cache-buster in the HTML
+  var APP_VER = "13";  // keep in step with the ?v= cache-buster in the HTML
   var PROJECT = "https://ugsklcipzyiogxynshnh.supabase.co";
   var BASE    = PROJECT + "/rest/v1";
   var AUTH    = PROJECT + "/auth/v1";
@@ -187,6 +187,23 @@
   // WhatsApp and the number staff sees in the app can never diverge.
   function feeFor(enrollmentId, months) {
     return rpc("enrollment_fee", { p_enrollment: enrollmentId, p_months: months || null });
+  }
+
+  // What has this enrollment actually paid? Kept separate from feeFor(),
+  // which answers the different question "what is the rate". Showing one
+  // where the other belongs is what made the profile, the timeline and
+  // the Fees screen look like they disagreed.
+  function paymentSummary(enrollmentId) {
+    return rpc("enrollment_payment_summary", { p_enrollment: enrollmentId });
+  }
+
+  function confirmPayment(paymentId) {
+    return rpc("confirm_payment", { p_tenant: TENANT, p_payment: paymentId });
+  }
+
+  function voidPayment(paymentId, reason) {
+    return rpc("void_payment", { p_tenant: TENANT, p_payment: paymentId,
+                                 p_reason: reason || null });
   }
 
   function payments(opts) {
@@ -438,6 +455,7 @@
     saveStudent: saveStudent, saveEnrollment: saveEnrollment,
     feeRules: feeRules, saveFeeRule: saveFeeRule, deleteFeeRule: deleteFeeRule,
     feeFor: feeFor, payments: payments, recordPayment: recordPayment,
+    paymentSummary: paymentSummary, confirmPayment: confirmPayment, voidPayment: voidPayment,
     reminderQueue: reminderQueue, reminderHistory: reminderHistory,
     logManualReminder: logManualReminder, setWhatsappStatus: setWhatsappStatus,
     attendanceRoster: attendanceRoster, saveAttendance: saveAttendance,

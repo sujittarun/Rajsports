@@ -3,3 +3,9 @@
 node_modules/
 # Third-party design skills are installed locally, not vendored here.
 .claude/skills/
+
+# Logo and font explorations. They stay on disk for reference but are not
+# part of the app: only favicon.svg and the two launcher icons ship.
+assets/img/*.png
+!assets/img/icon-192.png
+!assets/img/icon-512.png

@@ -7,7 +7,7 @@
 <title>Fees · Raj Sports</title>
 <link rel="icon" href="assets/img/favicon.svg">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="assets/css/app.css?v=12">
+<link rel="stylesheet" href="assets/css/app.css?v=13">
 </head>
 <body>
   <header class="topbar"></header>
@@ -22,8 +22,8 @@
 
   <nav class="nav"></nav>
 
-<script src="assets/js/cloud.js?v=12"></script>
-<script src="assets/js/core.js?v=12"></script>
+<script src="assets/js/cloud.js?v=13"></script>
+<script src="assets/js/core.js?v=13"></script>
 <script>
 (function () {
   if (!App.requireStaff()) return;
@@ -92,17 +92,44 @@
       host.innerHTML = '<div class="list">' + rows.map(function (p, i) {
         var c = ref.centreById[p.centre_id] || {};
         var pend = p.status === "pending_verification";
+        var sub = App.esc([App.longDate(p.on_date), c.short_name,
+          p.sport ? App.cap(p.sport) : null, p.mode,
+          p.months ? p.months + (p.months === 1 ? " month" : " months") : null,
+          p.kind === "admission" ? "joining fee" : null].filter(Boolean).join(" · "));
+        var money = '<div class="money" style="font-weight:680;font-size:15px' +
+          (pend ? ";opacity:.55" : "") + '">' + App.money(p.amount) + "</div>";
+
+        // An unverified payment used to be a dead end: it showed as
+        // unverified forever with no way to confirm it. Now it is the
+        // one row on this screen that carries an action.
+        if (pend) {
+          return '<div class="row row-in" style="animation-delay:' + Math.min(i * 24, 280) +
+            'ms" data-pending="' + p.id + '">' +
+            '<div class="row-main"><div class="row-t">' + App.esc(p.name || "Unnamed") + "</div>" +
+            '<div class="row-s">' + sub + "</div></div>" +
+            '<div class="row-end">' + money +
+              '<button class="btn btn-sm btn-primary mt-1" data-confirm>Confirm</button></div></div>';
+        }
         return '<a class="row row-in" style="animation-delay:' + Math.min(i * 24, 280) +
           'ms" href="student.html?id=' + (p.member_id || "") + '">' +
           '<div class="row-main"><div class="row-t">' + App.esc(p.name || "Unnamed") + "</div>" +
-          '<div class="row-s">' + App.esc([App.longDate(p.on_date), c.short_name,
-            p.sport ? App.cap(p.sport) : null, p.mode,
-            p.months ? p.months + " months" : null].filter(Boolean).join(" · ")) + "</div></div>" +
-          '<div class="row-end"><div class="money" style="font-weight:680;font-size:15px' +
-            (pend ? ";opacity:.55" : "") + '">' + App.money(p.amount) + "</div>" +
-            (pend ? '<div class="small" style="color:var(--due)">unverified</div>' : "") +
-          "</div></a>";
+          '<div class="row-s">' + sub + "</div></div>" +
+          '<div class="row-end">' + money + "</div></a>";
       }).join("") + "</div>";
+
+      App.$$("[data-pending]", host).forEach(function (node) {
+        App.$("[data-confirm]", node).addEventListener("click", function () {
+          var btn = this; btn.disabled = true; btn.textContent = "…";
+          RS.confirmPayment(+node.dataset.pending).then(function (r) {
+            App.toast(r && r.already ? "Already confirmed"
+              : "Confirmed, paid up to " + App.longDate(r.renewal_on), "good");
+            render();
+          }).catch(function (e) {
+            btn.disabled = false; btn.textContent = "Confirm";
+            App.toast(e.message || "Could not confirm.", "bad");
+          });
+        });
+      });
     }).catch(function (e) { App.fail(view, e); });
   }
 

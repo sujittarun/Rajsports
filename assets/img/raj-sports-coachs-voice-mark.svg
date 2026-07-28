@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 190 124" role="img" aria-labelledby="title desc">
+  <title id="title">Raj Sports coach's voice mark</title>
+  <desc id="desc">A single symbol combining a coach's whistle with a friendly speech bubble.</desc>
+  <defs>
+    <mask id="coach-voice" maskUnits="userSpaceOnUse" x="0" y="0" width="160" height="124">
+      <rect width="160" height="124" fill="black"/>
+      <circle cx="55" cy="59" r="43" fill="white"/>
+      <path d="M55 16 L145 22 Q152 23 152 30 V55 Q152 62 145 63 L91 69
+               Q82 70 78 78 L68 96 L47 92 Z" fill="white"/>
+      <path d="M39 88 L78 114 L68 79 Z" fill="white"/>
+      <circle cx="53" cy="58" r="17" fill="black"/>
+      <rect x="112" y="31" width="25" height="9" rx="4.5"
+            transform="rotate(4 124.5 35.5)" fill="black"/>
+    </mask>
+  </defs>
+  <rect width="160" height="124" fill="#14543e" mask="url(#coach-voice)"/>
+  <g fill="none" stroke="#a9701a" stroke-width="6" stroke-linecap="round">
+    <path d="M166 34 L179 27"/>
+    <path d="M168 47 H183"/>
+    <path d="M166 60 L179 67"/>
+  </g>
+</svg>

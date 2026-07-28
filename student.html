@@ -7,7 +7,7 @@
 <title>Student · Raj Sports</title>
 <link rel="icon" href="assets/img/favicon.svg">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="assets/css/app.css?v=12">
+<link rel="stylesheet" href="assets/css/app.css?v=13">
 <style>
   .hero { display: flex; align-items: center; gap: 15px; padding: 20px 16px 16px; }
   .hero .avatar { width: 56px; height: 56px; border-radius: 18px; font-size: 18px; }
@@ -73,8 +73,8 @@
 
   <nav class="nav"></nav>
 
-<script src="assets/js/cloud.js?v=12"></script>
-<script src="assets/js/core.js?v=12"></script>
+<script src="assets/js/cloud.js?v=13"></script>
+<script src="assets/js/core.js?v=13"></script>
 <script>
 (function () {
   if (!App.requireStaff()) return;
@@ -156,7 +156,8 @@
       '<span class="status ' + (off ? "status-muted" : st.cls) + '">' +
         App.esc(off ? App.cap(e.status) : st.label) + "</span></div>" +
       '<dl class="kv">' +
-        "<dt>Fee</dt><dd class=\"money\" data-fee>…</dd>" +
+        "<dt>Rate</dt><dd class=\"money\" data-fee>…</dd>" +
+        "<dt>Last paid</dt><dd class=\"money\" data-paid>…</dd>" +
         "<dt>Plan</dt><dd>" + e.plan_months + (e.plan_months === 1 ? " month" : " months") +
           (e.custom_amount != null ? ", custom rate" : "") + "</dd>" +
         "<dt>Joined</dt><dd>" + App.esc(App.longDate(e.joined_on)) + "</dd>" +
@@ -174,6 +175,27 @@
       // Always ask the server what this enrollment owes. Never compute
       // a fee in the client: it would eventually disagree with the
       // number the parent gets on WhatsApp.
+      // "Rate" and "Last paid" answer two different questions and used
+      // to be conflated into one row called Fee, which is why the
+      // profile looked like it disagreed with the payment.
+      RS.paymentSummary(eid).then(function (sm) {
+        var cell = App.$("[data-paid]", node);
+        if (!cell) return;
+        if (sm && sm.last_amount != null) {
+          cell.textContent = App.money(sm.last_amount) +
+            (sm.last_months ? " · " + sm.last_months +
+              (sm.last_months === 1 ? " month" : " months") : "") +
+            " · " + App.shortDate(sm.last_on);
+        } else {
+          cell.textContent = "nothing yet"; cell.style.color = "var(--text-3)";
+        }
+        if (sm && sm.unverified_count) {
+          cell.insertAdjacentHTML("afterend",
+            '<dt></dt><dd style="color:var(--due)">' + App.money(sm.unverified) +
+            " awaiting verification</dd>");
+        }
+      }).catch(function () {});
+
       RS.feeFor(eid).then(function (f) {
         var cell = App.$("[data-fee]", node);
         if (!cell) return;
@@ -202,8 +224,9 @@
       var cls = t.kind === "payment" ? "is-pay" : (t.kind === "reminder" ? "is-rem" : "");
       var when = new Date(t.at).toLocaleString("en-IN", {
         day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: true });
-      return '<div class="tl-i ' + cls + '"><div class="tl-t">' + App.esc(t.title) + "</div>" +
-        '<div class="tl-s">' + App.esc(when + (t.body ? " · " + t.body : "")) + "</div></div>";
+      var line = App.timelineLine(t);
+      return '<div class="tl-i ' + cls + '"><div class="tl-t">' + App.esc(line.title) + "</div>" +
+        '<div class="tl-s">' + App.esc(when + (line.detail ? " · " + line.detail : "")) + "</div></div>";
     }).join("") + "</div>";
   }
 
@@ -228,41 +251,77 @@
         html:
           '<div class="field"><label>Amount</label><input class="input" id="amt" type="number" ' +
             'inputmode="numeric" value="' + (f && f.amount != null ? Math.round(f.amount) : "") + '"></div>' +
-          '<div class="field"><label>Months paid for</label><div class="chips" id="mon">' +
-            [1,3,6,12].map(function (n) {
-              return '<button class="chip" type="button" data-m="' + n + '" aria-pressed="' +
-                (n === e.plan_months) + '">' + n + (n === 1 ? " month" : " months") + "</button>"; }).join("") +
-          "</div></div>" +
+          '<div class="field"><label>What is this payment for?</label>' +
+            '<div class="chips" id="kind">' +
+              '<button class="chip" type="button" data-k="renewal" aria-pressed="true">Coaching fees</button>' +
+              '<button class="chip" type="button" data-k="admission" aria-pressed="false">Joining fee</button>' +
+            "</div></div>" +
+          '<div class="field" id="monWrap"><label id="monLabel">Months it covers</label>' +
+            '<div class="chips" id="mon">' +
+              [1,3,6,12].map(function (n) {
+                return '<button class="chip" type="button" data-m="' + n + '" aria-pressed="' +
+                  (n === e.plan_months) + '">' + n + (n === 1 ? " month" : " months") + "</button>"; }).join("") +
+              '<button class="chip" type="button" data-m="0" aria-pressed="false">None</button>' +
+            "</div>" +
+            '<div class="hint" id="monHint"></div></div>' +
           '<div class="field"><label>Mode</label><div class="chips" id="mode">' +
             ["UPI","Cash","Bank"].map(function (x, i) {
               return '<button class="chip" type="button" data-v="' + x + '" aria-pressed="' +
                 (i === 0) + '">' + x + "</button>"; }).join("") + "</div></div>" +
-          '<div class="grid-2">' +
-            '<div class="field"><label>Date</label><input class="input" id="don" type="date" value="' +
-              App.isoDate() + '"></div>' +
-            '<div class="field"><label>Type</label><select class="select" id="kind">' +
-              '<option value="renewal">Renewal</option><option value="admission">Joining fee</option>' +
-            "</select></div></div>" +
+          '<div class="field"><label>Date</label><input class="input" id="don" type="date" value="' +
+            App.isoDate() + '"></div>' +
           '<div class="field"><label>Reference <span class="hint">optional</span></label>' +
             '<input class="input" id="ref" placeholder="UTR or cheque number"></div>' +
           '<label class="small" style="display:flex;gap:9px;align-items:center;margin-bottom:14px">' +
             '<input type="checkbox" id="pend"> Claimed but not verified yet</label>' +
           '<button class="btn btn-primary btn-block" id="save">Save payment</button>',
         onMount: function (el) {
+          /* Months and type used to be independent, so "Joining fee" plus
+             "3 months" was reachable and silently bought the student
+             nothing. They are coupled now, and the hint states in plain
+             words what the renewal date will do. */
+          function refreshHint() {
+            var months = +chosen(el, "#mon", "m");
+            var hint = App.$("#monHint", el);
+            if (!months) {
+              hint.textContent = "One-off. The renewal date does not move.";
+              return;
+            }
+            var from = App.parseDate(e.renewal_on) || new Date();
+            var today = new Date();
+            var base = from > today ? from : today;
+            var to = new Date(base); to.setMonth(to.getMonth() + months);
+            hint.textContent = "Paid up to " + App.longDate(App.isoDate(to)) + ".";
+          }
           pick(el, "#mon", function (v) {
-            RS.feeFor(eid, +v).then(function (f2) {
-              if (f2 && f2.amount != null) App.$("#amt", el).value = Math.round(f2.amount);
-            }).catch(function () {});
+            if (+v > 0) {
+              RS.feeFor(eid, +v).then(function (f2) {
+                if (f2 && f2.amount != null) App.$("#amt", el).value = Math.round(f2.amount);
+              }).catch(function () {});
+            }
+            refreshHint();
+          });
+          pick(el, "#kind", function (k) {
+            // A joining fee defaults to covering nothing; the manager can
+            // still say it also covers months, which now actually works.
+            var target = k === "admission" ? "0" : String(e.plan_months);
+            App.$$("#mon .chip", el).forEach(function (x) {
+              x.setAttribute("aria-pressed", String(x.dataset.m === target)); });
+            App.$("#monLabel", el).textContent = k === "admission"
+              ? "Does it also cover months?" : "Months it covers";
+            refreshHint();
           });
           pick(el, "#mode");
+          refreshHint();
           App.$("#save", el).addEventListener("click", function () {
             var btn = this, amt = Number(App.$("#amt", el).value);
             if (!amt || amt <= 0) { App.toast("Enter an amount.", "bad"); return; }
             btn.disabled = true; btn.textContent = "Saving…";
             RS.recordPayment({
-              enrollment: eid, amount: amt, months: +chosen(el, "#mon", "m"),
+              enrollment: eid, amount: amt,
+              months: +chosen(el, "#mon", "m") || null,
               mode: chosen(el, "#mode", "v"), date: App.$("#don", el).value,
-              kind: App.$("#kind", el).value, ref: App.$("#ref", el).value.trim() || null,
+              kind: chosen(el, "#kind", "k"), ref: App.$("#ref", el).value.trim() || null,
               status: App.$("#pend", el).checked ? "pending_verification" : "paid"
             }).then(function () {
               var pend = App.$("#pend", el).checked;
@@ -284,7 +343,9 @@
       c.addEventListener("click", function () {
         App.$$(sel + " .chip", el).forEach(function (x) { x.setAttribute("aria-pressed", "false"); });
         c.setAttribute("aria-pressed", "true");
-        if (after) after(c.dataset.m || c.dataset.v);
+        // chips carry their value on data-m, data-v or data-k depending
+        // on the group; forward whichever one this group uses.
+        if (after) after(c.dataset.m || c.dataset.v || c.dataset.k);
       });
     });
   }

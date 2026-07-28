@@ -44,8 +44,11 @@ begin
     raise exception 'TEST FAIL: seed centres/batches missing';
   end if;
 
+  -- The seed ships 13, but batches are editable in Setup now, so this
+  -- asserts the seed is intact rather than pinning a number the manager
+  -- is expected to change.
   select count(*) into n from batches where tenant_id='raj';
-  if n <> 13 then raise exception 'TEST FAIL: expected 13 batches, got %', n; end if;
+  if n < 13 then raise exception 'TEST FAIL: seed batches missing, only % left', n; end if;
   raise notice 'OK  seed — 5 centres, 13 batches, 5 sports';
 
   -- ---------- members + enrollments ----------
