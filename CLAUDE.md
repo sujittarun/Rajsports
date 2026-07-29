@@ -298,7 +298,7 @@ npx http-server -p 8135 -c-1 .          # the web app
 cd android-app && ./gradlew :app:assembleDebug
 ./scripts/dry-run.sh supabase/x.sql     # validate against live, roll back
 ./scripts/test-migration.sh             # behaviour tests, roll back
-./scripts/migrate.sh supabase/x.sql     # apply for real
+../AcademyManager/scripts/migrate.sh --scope raj supabase/x.sql   # apply for real (ledger-checked)
 ```
 
 `scripts/dry-run.sh` and `scripts/test-migration*.sh` run the SQL against the

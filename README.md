@@ -73,7 +73,7 @@ other live tenants in it:
 ```bash
 ./scripts/dry-run.sh supabase/migration-raj-3.sql   # validate, roll back
 ./scripts/test-migration-3.sh                       # behaviour tests, roll back
-./scripts/migrate.sh supabase/migration-raj-3.sql   # apply
+../AcademyManager/scripts/migrate.sh --scope raj supabase/migration-raj-3.sql   # apply
 ```
 
 ## WhatsApp
@@ -101,7 +101,7 @@ update tenants
 - [ ] Set the real fees in **Setup → Fees** (what's loaded is placeholder)
 - [ ] Confirm which sports run at Pushpak, Hill County and PRC — those
       batches are sport-neutral until the client says
-- [ ] `./scripts/migrate.sh supabase/clear-sample-data.sql` to remove the
+- [ ] `../AcademyManager/scripts/migrate.sh --scope raj supabase/clear-sample-data.sql` to remove the
       demo students, keeping the real timetable
 - [ ] Replace the dummy staff login with a real account
 
