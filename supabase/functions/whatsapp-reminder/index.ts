@@ -91,7 +91,15 @@ type WaConfig = {
   templates: Record<string, string>;
   brand: string;
   lang: string;
+  /** Fetched by Meta on every send, so it must stay publicly reachable. */
+  headerImage: string;
 };
+
+/* The platform's own mark, not a tenant's. With one shared sender the
+   header is the same for everyone; per-academy branding arrives when
+   each academy has its own number. */
+const DEFAULT_HEADER_IMAGE =
+  "https://sujittarun.github.io/AcademyManager/assets/branding/whatsapp-header.jpg";
 
 async function loadConfig(tenant: string): Promise<WaConfig> {
   const rows = await db(`/tenants?id=eq.${tenant}&select=name,config`);
@@ -106,6 +114,7 @@ async function loadConfig(tenant: string): Promise<WaConfig> {
     templates: wa.templates || {},
     brand: String(cfg.brand || rows?.[0]?.name || "the academy"),
     lang: String(wa.templateLang || "en"),
+    headerImage: String(wa.headerImage || DEFAULT_HEADER_IMAGE),
   };
 }
 
@@ -131,7 +140,13 @@ function longDate(iso: string) {
     { day: "numeric", month: "short", year: "numeric" });
 }
 
-/** The exact words a parent reads. Kept identical to App.reminderText()
+/** The exact words a parent reads on the MANUAL path, where free text
+ *  is allowed because the owner is sending it himself. The automatic
+ *  path cannot use this — a business-initiated message must be an
+ *  approved template — so the two are kept saying the same thing by
+ *  hand. Change one, change the other.
+ *
+ *  Kept identical to App.reminderText()
  *  in assets/js/core.js so a hand-sent and an auto-sent reminder are
  *  indistinguishable — the client's "no bad customer experience" rule. */
 function messageBody(r: QueueRow, cfg: WaConfig): string {
@@ -180,6 +195,17 @@ async function sendTemplate(to: string, r: QueueRow, cfg: WaConfig): Promise<Sen
     return { ok: false, code: "no_credentials", retryable: false,
              message: "Meta WhatsApp credentials are not configured." };
   }
+  /* One WhatsApp Business account sends for every academy, so the
+     templates on it are shared and their wording cannot name one. The
+     academy is a PARAMETER — {{2}} — and this is the only place that
+     supplies it. Get the order wrong and a Leo parent is told they owe
+     money to Raj.
+
+       {{1}} student   {{2}} academy   {{3}} amount   {{4}} due date
+
+     The header is not decoration: a template approved WITH a media
+     header must be SENT with one, or Meta rejects the message
+     outright. */
   const body = {
     messaging_product: "whatsapp",
     to,
@@ -187,14 +213,21 @@ async function sendTemplate(to: string, r: QueueRow, cfg: WaConfig): Promise<Sen
     template: {
       name: templateFor(r.stage, cfg),
       language: { code: cfg.lang },
-      components: [{
-        type: "body",
-        parameters: [
-          { type: "text", text: r.member_name || "Player" },
-          { type: "text", text: r.amount != null ? money(r.amount) : "the coaching fee" },
-          { type: "text", text: longDate(r.due_date) },
-        ],
-      }],
+      components: [
+        {
+          type: "header",
+          parameters: [{ type: "image", image: { link: cfg.headerImage } }],
+        },
+        {
+          type: "body",
+          parameters: [
+            { type: "text", text: r.member_name || "Player" },
+            { type: "text", text: cfg.brand },
+            { type: "text", text: r.amount != null ? money(r.amount) : "the coaching fee" },
+            { type: "text", text: longDate(r.due_date) },
+          ],
+        },
+      ],
     },
   };
 
