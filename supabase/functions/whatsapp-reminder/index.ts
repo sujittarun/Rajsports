@@ -702,11 +702,49 @@ Deno.serve(async (req) => {
           });
         }
         return json({
-          phone_number: await ask("the number itself", `${META_PHONE}?fields=id,display_phone_number,verified_name,quality_rating`),
+          phone_number: await ask("the number itself", `${META_PHONE}?fields=id,display_phone_number,verified_name,quality_rating,status,code_verification_status,name_status,platform_type,throughput`),
           its_waba: await ask("the account that owns it", `${META_PHONE}?fields=whatsapp_business_account{id,name}`),
           me: await ask("who the token is", "me?fields=id,name"),
           businesses: await ask("businesses it can see", "me/businesses?fields=id,name"),
         });
+      }
+      case "register": {
+        /* The last setup step Cloud API needs: a number added to a WABA
+           cannot send until it is registered, which is what WhatsApp
+           Manager means by "Pending".
+           
+           The PIN is the caller's to choose and to remember — it becomes
+           the number's two-step verification PIN, and it is needed again
+           to move the number to another account later. It is never
+           stored here and never defaulted, because a PIN nobody knows is
+           worse than no PIN.
+           
+           Meta allows 10 registration attempts per number per 72 hours,
+           so this reports rather than retries. */
+        const b = await req.json().catch(() => ({}));
+        const pin = String(b.pin || "");
+        if (!/^\d{6}$/.test(pin)) {
+          return json({ error: "a 6-digit pin is required: POST {\"pin\":\"123456\"}" }, 400);
+        }
+        const r = await fetch(`${GRAPH}/${META_PHONE}/register`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${META_TOKEN}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ messaging_product: "whatsapp", pin }),
+        });
+        const out = await r.json();
+        if (!r.ok) {
+          return json({
+            registered: false,
+            error: out?.error?.message || out,
+            code: out?.error?.code,
+            hint: out?.error?.code === 133016
+              ? "Ten attempts used in 72 hours; Meta has locked registration until the window clears."
+              : out?.error?.code === 133005
+                ? "That is not the number's existing two-step PIN. Use the one already set, or clear two-step verification in WhatsApp Manager first."
+                : undefined,
+          }, 400);
+        }
+        return json({ registered: true, meta: out });
       }
       case "preview": {
         const cfg = await loadConfig(tenant);
