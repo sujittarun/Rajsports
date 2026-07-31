@@ -697,6 +697,8 @@ Deno.serve(async (req) => {
             its_numbers: await ask("...with these numbers", `${unknown}/phone_numbers?fields=id,display_phone_number,verified_name`),
             as_app: await ask("an App?", `${unknown}?fields=id,name,category,link`),
             as_business: await ask("a Business?", `${unknown}?fields=id,name,verification_status`),
+            verification: await ask("what is outstanding on verification", `${unknown}?fields=verification_status,business_type,vertical,created_time,primary_page,link,is_disabled_for_integrity_reasons`),
+            waba_health: await ask("account review + messaging tier", `${unknown}/owned_whatsapp_business_accounts?fields=id,name,account_review_status,business_verification_status,message_template_namespace`),
           });
         }
         return json({
