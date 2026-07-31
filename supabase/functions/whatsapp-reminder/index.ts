@@ -350,6 +350,120 @@ function reasonText(reason: string) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Templates                                                           */
+/* ------------------------------------------------------------------ */
+
+/** The WABA this token is allowed to manage.
+ *
+ *  Asked of the token itself rather than of the phone number: a system
+ *  user token carries granular scopes listing exactly which business
+ *  accounts it may touch, so this answers "which WABA" and "is the
+ *  token scoped correctly" in one call. A phone number does not expose
+ *  its parent account at all — the first attempt at this asked for a
+ *  field that does not exist.
+ */
+async function wabaId(): Promise<string> {
+  const res = await fetch(
+    `${GRAPH}/debug_token?input_token=${encodeURIComponent(META_TOKEN)}`,
+    { headers: { Authorization: `Bearer ${META_TOKEN}` } },
+  );
+  const out = await res.json();
+  if (!res.ok) {
+    const t = META_TOKEN;
+    throw new Error(
+      (out?.error?.message || "could not inspect the token") +
+      ` | token shape: length=${t.length}, starts_EAA=${t.startsWith("EAA")}`,
+    );
+  }
+  const scopes = (out?.data?.granular_scopes || []) as Array<
+    { scope: string; target_ids?: string[] }
+  >;
+  const wa = scopes.find((g) =>
+    g.scope === "whatsapp_business_management" || g.scope === "whatsapp_business_messaging"
+  );
+  let id = wa?.target_ids?.[0];
+
+  /* Fall back to asking the business directly. A system user token can
+     carry the whatsapp scopes without target_ids when the WhatsApp
+     account is reachable through the business rather than assigned to
+     the user directly — the permission is there, the asset pointer is
+     not. Ids are not secrets, so both paths are safe to report on. */
+  if (!id) {
+    const biz = scopes.find((g) => g.scope === "business_management")?.target_ids || [];
+    for (const b of biz) {
+      const r = await fetch(
+        `${GRAPH}/${b}/owned_whatsapp_business_accounts?fields=id,name`,
+        { headers: { Authorization: `Bearer ${META_TOKEN}` } },
+      );
+      const o = await r.json();
+      if (r.ok && o?.data?.length) { id = String(o.data[0].id); break; }
+    }
+  }
+
+  if (!id) {
+    throw new Error(
+      "no WhatsApp business account reachable from this token. In Business " +
+      "Settings > System users, select the user, Add assets, and give it Full " +
+      "control of the WhatsApp account — then regenerate the token. " +
+      "granular scopes: " + JSON.stringify(scopes),
+    );
+  }
+  return String(id);
+}
+
+/**
+ * What Meta thinks of our templates.
+ *
+ * A send fails outright if a template is not APPROVED, and the failure
+ * arrives as a code on a message that was never delivered — long after
+ * anyone could act on it. This asks first, and it asks with the token
+ * that already lives here, so checking never means handling a
+ * credential.
+ *
+ * It also reports whether each template's shape matches what
+ * sendTemplate() actually sends: a media header and four body
+ * parameters. An approved template with three is approved and wrong.
+ */
+async function templateStatus(cfg: WaConfig) {
+  const waba = await wabaId();
+  const res = await fetch(
+    `${GRAPH}/${waba}/message_templates?fields=name,status,category,language,components,rejected_reason&limit=50`,
+    { headers: { Authorization: `Bearer ${META_TOKEN}` } },
+  );
+  const out = await res.json();
+  if (!res.ok) return { error: out?.error?.message || "could not list templates" };
+
+  const wanted = [cfg.templates.headsUp, cfg.templates.dueToday, cfg.templates.overdue];
+  const found = (out?.data || []).map((t: Record<string, unknown>) => {
+    const comps = (t.components || []) as Array<Record<string, unknown>>;
+    const header = comps.find((c) => c.type === "HEADER");
+    const bodyText = String(comps.find((c) => c.type === "BODY")?.text || "");
+    const params = new Set(bodyText.match(/\{\{\d+\}\}/g) || []);
+    return {
+      name: t.name,
+      status: t.status,
+      category: t.category,
+      language: t.language,
+      header: header ? String(header.format || "") : "none",
+      body_params: params.size,
+      // what this engine requires, stated rather than assumed
+      usable: t.status === "APPROVED" &&
+              String(header?.format || "") === "IMAGE" &&
+              params.size === 4,
+      rejected_reason: t.rejected_reason || undefined,
+    };
+  });
+
+  return {
+    waba,
+    needed: wanted,
+    templates: found,
+    missing: wanted.filter((w) => !found.some((f: { name: unknown }) => f.name === w)),
+    ready: wanted.every((w) => found.some((f: { name: unknown; usable: boolean }) => f.name === w && f.usable)),
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* Routes                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -548,6 +662,10 @@ Deno.serve(async (req) => {
     switch (route) {
       case "run":     return json(await runSweep(tenant, url.searchParams.get("force") === "1"));
       case "retry":   return json(await runRetries(tenant));
+      case "templates": {
+        const cfg = await loadConfig(tenant);
+        return json(await templateStatus(cfg));
+      }
       case "preview": {
         const cfg = await loadConfig(tenant);
         const queue: QueueRow[] = await rpc("reminder_queue", { p_tenant: tenant, p_on: null });
