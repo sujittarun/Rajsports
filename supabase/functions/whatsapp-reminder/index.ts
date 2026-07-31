@@ -424,8 +424,8 @@ async function wabaId(): Promise<string> {
  * sendTemplate() actually sends: a media header and four body
  * parameters. An approved template with three is approved and wrong.
  */
-async function templateStatus(cfg: WaConfig) {
-  const waba = await wabaId();
+async function templateStatus(cfg: WaConfig, override?: string) {
+  const waba = override || await wabaId();
   const res = await fetch(
     `${GRAPH}/${waba}/message_templates?fields=name,status,category,language,components,rejected_reason&limit=50`,
     { headers: { Authorization: `Bearer ${META_TOKEN}` } },
@@ -664,7 +664,33 @@ Deno.serve(async (req) => {
       case "retry":   return json(await runRetries(tenant));
       case "templates": {
         const cfg = await loadConfig(tenant);
-        return json(await templateStatus(cfg));
+        // ?waba=... skips discovery. Meta's asset model has more ways to
+        // withhold an id than are worth guessing at from here.
+        return json(await templateStatus(cfg, url.searchParams.get("waba") || undefined));
+      }
+      case "probe": {
+        /* What can this token actually see? Each answer narrows the
+           fault: a phone number it can read but a WABA it cannot means
+           messaging works and management does not, which is a different
+           fix from a token with no assets at all. Ids are identifiers,
+           not secrets — the token itself is never echoed. */
+        const ask = async (label: string, path: string) => {
+          try {
+            const r = await fetch(`${GRAPH}/${path}`, {
+              headers: { Authorization: `Bearer ${META_TOKEN}` },
+            });
+            const o = await r.json();
+            return { probe: label, ok: r.ok, result: r.ok ? o : (o?.error?.message || o) };
+          } catch (e) {
+            return { probe: label, ok: false, result: String(e) };
+          }
+        };
+        return json({
+          phone_number: await ask("the number itself", `${META_PHONE}?fields=id,display_phone_number,verified_name,quality_rating`),
+          its_waba: await ask("the account that owns it", `${META_PHONE}?fields=whatsapp_business_account{id,name}`),
+          me: await ask("who the token is", "me?fields=id,name"),
+          businesses: await ask("businesses it can see", "me/businesses?fields=id,name"),
+        });
       }
       case "preview": {
         const cfg = await loadConfig(tenant);
