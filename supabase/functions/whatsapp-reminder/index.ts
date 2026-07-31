@@ -685,6 +685,20 @@ Deno.serve(async (req) => {
             return { probe: label, ok: false, result: String(e) };
           }
         };
+        /* ?id= identifies a single unknown id. Meta's dashboard shows
+           several long numbers on one screen and names them
+           inconsistently; asking the API what a thing IS beats
+           squinting at the page. */
+        const unknown = url.searchParams.get("id");
+        if (unknown) {
+          return json({
+            id: unknown,
+            as_waba: await ask("a WhatsApp Business Account?", `${unknown}?fields=id,name,currency,timezone_id`),
+            its_numbers: await ask("...with these numbers", `${unknown}/phone_numbers?fields=id,display_phone_number,verified_name`),
+            as_app: await ask("an App?", `${unknown}?fields=id,name,category,link`),
+            as_business: await ask("a Business?", `${unknown}?fields=id,name,verification_status`),
+          });
+        }
         return json({
           phone_number: await ask("the number itself", `${META_PHONE}?fields=id,display_phone_number,verified_name,quality_rating`),
           its_waba: await ask("the account that owns it", `${META_PHONE}?fields=whatsapp_business_account{id,name}`),
