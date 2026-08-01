@@ -803,13 +803,44 @@ Deno.serve(async (req) => {
             waba_health: await ask("account review + messaging tier", `${unknown}/owned_whatsapp_business_accounts?fields=id,name,account_review_status,business_verification_status,message_template_namespace`),
           });
         }
+        /* `?waba=` asks the two questions that a bare "(#100) Invalid
+           parameter" from /register hides: whether an app is actually
+           subscribed to the account (nothing works if not), and whether
+           the number has finished onboarding. Meta reports neither in
+           the error. */
+        const waba = url.searchParams.get("waba");
         return json({
-          phone_number: await ask("the number itself", `${META_PHONE}?fields=id,display_phone_number,verified_name,quality_rating,status,code_verification_status,name_status,platform_type,throughput`),
+          phone_number: await ask("the number itself", `${META_PHONE}?fields=id,display_phone_number,verified_name,quality_rating,status,code_verification_status,name_status,platform_type,throughput,account_mode,is_official_business_account,messaging_limit_tier`),
           its_waba: await ask("the account that owns it", `${META_PHONE}?fields=whatsapp_business_account{id,name}`),
           me: await ask("who the token is", "me?fields=id,name"),
+          scopes: await ask("what the token is allowed to do", "me/permissions"),
           businesses: await ask("businesses it can see", "me/businesses?fields=id,name"),
+          ...(waba ? {
+            subscribed_apps: await ask("is an app subscribed to the WABA?", `${waba}/subscribed_apps`),
+            waba_detail: await ask("the account's own state", `${waba}?fields=id,name,account_review_status,business_verification_status,ownership_type,primary_funding_id`),
+          } : {}),
         });
       }
+      case "subscribe": {
+        /* The step before registration, and the one whose absence is
+           invisible: Cloud API will not register a number until an app
+           is subscribed to its WABA, and /register reports that as a
+           bare "(#100) Invalid parameter" naming nothing.
+           `GET /{waba}/subscribed_apps` returning an empty array is the
+           only way to see it. */
+        const waba = url.searchParams.get("waba");
+        if (!waba) return json({ error: "?waba=... is required" }, 400);
+        const r = await fetch(`${GRAPH}/${waba}/subscribed_apps`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${META_TOKEN}` },
+        });
+        const out = await r.json();
+        const after = await fetch(`${GRAPH}/${waba}/subscribed_apps`, {
+          headers: { Authorization: `Bearer ${META_TOKEN}` },
+        }).then((x) => x.json()).catch(() => null);
+        return json({ subscribed: r.ok, meta: out, now_subscribed: after }, r.ok ? 200 : 400);
+      }
+
       case "register": {
         /* The last setup step Cloud API needs: a number added to a WABA
            cannot send until it is registered, which is what WhatsApp
@@ -828,10 +859,25 @@ Deno.serve(async (req) => {
         if (!/^\d{6}$/.test(pin)) {
           return json({ error: "a 6-digit pin is required: POST {\"pin\":\"123456\"}" }, 400);
         }
-        const r = await fetch(`${GRAPH}/${META_PHONE}/register`, {
+        /* India stores WhatsApp data locally, and some Indian WABAs
+           will not register a number without the region named. Meta
+           reports its absence as the same bare 100 as everything else,
+           so it is offered rather than assumed. */
+        const region = String(b.region || "");
+        /* ?v=v23.0 overrides the Graph version for this call only.
+           The function pins v20.0 for everything else, and changing that
+           globally would move Raj's live sending at the same time — a
+           diagnostic must not do that. */
+        const ver = url.searchParams.get("v");
+        const base = ver ? `https://graph.facebook.com/${ver}` : GRAPH;
+        const r = await fetch(`${base}/${META_PHONE}/register`, {
           method: "POST",
           headers: { Authorization: `Bearer ${META_TOKEN}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ messaging_product: "whatsapp", pin }),
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            pin,
+            ...(region ? { data_localization_region: region } : {}),
+          }),
         });
         const out = await r.json();
         if (!r.ok) {
@@ -839,6 +885,15 @@ Deno.serve(async (req) => {
             registered: false,
             error: out?.error?.message || out,
             code: out?.error?.code,
+            /* Meta's code 100 is "Invalid parameter" and says nothing on
+               its own. The subcode and the user-facing pair are where it
+               actually names the problem — a number that never finished
+               Cloud API onboarding and one whose two-step PIN is already
+               set both arrive here as a bare 100. */
+            subcode: out?.error?.error_subcode,
+            user_title: out?.error?.error_user_title,
+            user_msg: out?.error?.error_user_msg,
+            trace: out?.error?.fbtrace_id,
             hint: out?.error?.code === 133016
               ? "Ten attempts used in 72 hours; Meta has locked registration until the window clears."
               : out?.error?.code === 133005
