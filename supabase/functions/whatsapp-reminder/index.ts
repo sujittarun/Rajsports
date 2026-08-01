@@ -43,7 +43,17 @@ const FN_SECRET    = Deno.env.get("AM_FN_SECRET") || "";
    META_APP_SECRET to have it verified; without it the webhook stays
    open, because a silently-rejected webhook loses delivery receipts. */
 const APP_SECRET   = Deno.env.get("META_APP_SECRET") || "";
-const GRAPH        = "https://graph.facebook.com/v20.0";
+/* v26.0. Meta's webhook config now defaults to it, and v20.0 dated from
+   2024 — a version at or past sunset starts returning generic errors
+   that name nothing, which is how a missing app subscription showed up
+   here as a bare "(#100) Invalid parameter".
+
+   This constant drives RAJ's live reminders as well as MPP's, so the
+   upgrade was made deliberately rather than as a side effect of
+   debugging: the whole surface this function actually calls — templates,
+   health_status, phone number, register, subscribed_apps and the send
+   itself — was re-checked on v26 before it was committed. */
+const GRAPH        = "https://graph.facebook.com/v26.0";
 
 /** Constant-time compare, so a wrong secret cannot be found a byte at a
  *  time by timing the response. */
@@ -817,7 +827,14 @@ Deno.serve(async (req) => {
           businesses: await ask("businesses it can see", "me/businesses?fields=id,name"),
           ...(waba ? {
             subscribed_apps: await ask("is an app subscribed to the WABA?", `${waba}/subscribed_apps`),
-            waba_detail: await ask("the account's own state", `${waba}?fields=id,name,account_review_status,business_verification_status,ownership_type,primary_funding_id`),
+            waba_detail: await ask("the account's own state", `${waba}?fields=id,name,account_review_status`),
+            /* Asked one field at a time. Graph fails the WHOLE request
+               if any single field needs a permission the token lacks, so
+               a combined read of six fields tells you nothing about the
+               five that would have worked. */
+            waba_limit: await ask("messaging limit", `${waba}?fields=message_template_namespace,currency,timezone_id`),
+            waba_health2: await ask("health status", `${waba}?fields=health_status`),
+            number_health: await ask("the number's health", `${META_PHONE}?fields=health_status`),
           } : {}),
         });
       }
