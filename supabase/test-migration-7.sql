@@ -1,3 +1,10 @@
+-- ============================================================
+-- This harness writes to SHARED tables. It refuses to run on
+-- production, where a failed rollback is a data incident for
+-- every academy — not just this one. (0040)
+-- ============================================================
+select assert_test_environment();
+
 -- Instant attendance behavior tests. The runner wraps this in a
 -- transaction, so live data is restored on rollback.
 do $$

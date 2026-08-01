@@ -1,4 +1,11 @@
 -- ============================================================
+-- This harness writes to SHARED tables. It refuses to run on
+-- production, where a failed rollback is a data incident for
+-- every academy — not just this one. (0040)
+-- ============================================================
+select assert_test_environment();
+
+-- ============================================================
 -- QA: the fee payment path, end to end.
 --
 -- Three surfaces have to agree about one payment:

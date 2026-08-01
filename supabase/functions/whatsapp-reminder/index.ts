@@ -31,7 +31,41 @@ const SERVICE_KEY  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const META_TOKEN   = Deno.env.get("META_WHATSAPP_TOKEN") || "";
 const META_PHONE   = Deno.env.get("META_WHATSAPP_PHONE_NUMBER_ID") || "";
 const VERIFY_TOKEN = Deno.env.get("META_VERIFY_TOKEN") || "";
+/* The caller's shared secret. This function is deployed --no-verify-jwt
+   (Meta must be able to reach /webhook without a Supabase JWT), which
+   means Supabase's gateway checks nothing — so the check has to live
+   here. Without it, anyone who knows the URL can POST /run?tenant=X and
+   send real WhatsApp messages to that academy's parents: the tenant is
+   a query parameter, so it is cross-tenant by construction.
+   Set with: supabase secrets set AM_FN_SECRET=... */
+const FN_SECRET    = Deno.env.get("AM_FN_SECRET") || "";
+/* Meta signs every webhook POST with sha256 over the raw body. Set
+   META_APP_SECRET to have it verified; without it the webhook stays
+   open, because a silently-rejected webhook loses delivery receipts. */
+const APP_SECRET   = Deno.env.get("META_APP_SECRET") || "";
 const GRAPH        = "https://graph.facebook.com/v20.0";
+
+/** Constant-time compare, so a wrong secret cannot be found a byte at a
+ *  time by timing the response. */
+function secretsMatch(a: string, b: string): boolean {
+  if (!a || !b || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/** Meta's X-Hub-Signature-256 over the raw request body. */
+async function metaSignatureValid(raw: string, header: string | null): Promise<boolean> {
+  if (!APP_SECRET) return true;            // not configured — see note above
+  if (!header || !header.startsWith("sha256=")) return false;
+  const key = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(APP_SECRET),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(raw));
+  const hex = Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return secretsMatch(hex, header.slice("sha256=".length));
+}
 
 const DEFAULT_TENANT = "raj";
 
@@ -93,6 +127,11 @@ type WaConfig = {
   lang: string;
   /** Fetched by Meta on every send, so it must stay publicly reachable. */
   headerImage: string;
+  /** True only once the approved templates carry a 5th variable for the
+   *  collection account. Sending a parameter a template was not approved
+   *  with makes Meta reject the message, so this stays off until the
+   *  template really has it. */
+  upiParam: boolean;
 };
 
 /* The platform's own mark, not a tenant's. With one shared sender the
@@ -115,6 +154,7 @@ async function loadConfig(tenant: string): Promise<WaConfig> {
     brand: String(cfg.brand || rows?.[0]?.name || "the academy"),
     lang: String(wa.templateLang || "en"),
     headerImage: String(wa.headerImage || DEFAULT_HEADER_IMAGE),
+    upiParam: wa.upiParam === true,
   };
 }
 
@@ -128,6 +168,7 @@ type QueueRow = {
   due_date: string; days_since: number; stage: "heads_up" | "due" | "overdue";
   amount: number | null; months: number; fee_source: string;
   whatsapp_status: string; blocked_reason: string | null; already_sent: boolean;
+  upi_id: string | null; upi_name: string | null; upi_source: string | null;
 };
 
 const cap = (s: string) => s ? s[0].toUpperCase() + s.slice(1) : s;
@@ -138,6 +179,19 @@ function longDate(iso: string) {
   const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-IN",
     { day: "numeric", month: "short", year: "numeric" });
+}
+
+/* Where this parent pays. resolve_upi() picks the account in Postgres
+   (batch, then centre, then the academy) and reminder_queue carries it
+   here, so a BTV parent and a Pushpak parent are told different
+   accounts without this function deciding which.
+
+   A plain UPI id, not a upi:// link: WhatsApp does not reliably turn
+   one into something tappable, and a "tap to pay" that does nothing is
+   worse than an id a parent can paste into any UPI app. */
+function upiLine(r: QueueRow): string {
+  if (!r.upi_id) return "";
+  return ` Pay to UPI: ${r.upi_id}${r.upi_name ? ` (${r.upi_name})` : ""}.`;
 }
 
 /** The exact words a parent reads on the MANUAL path, where free text
@@ -154,22 +208,23 @@ function messageBody(r: QueueRow, cfg: WaConfig): string {
   const amt = r.amount != null ? money(r.amount) : "";
   const where = [r.centre, r.sport ? cap(r.sport) : null].filter(Boolean).join(", ");
   const at = where ? ` (${where})` : "";
+  const pay = upiLine(r);
 
   if (r.stage === "heads_up") {
     return `Hello! ${name}'s coaching fee at ${cfg.brand}${at} is due on ` +
       `${longDate(r.due_date)}.${amt ? ` Amount: ${amt}.` : ""}` +
-      ` Sharing this early so you can plan.`;
+      ` Sharing this early so you can plan.${pay}`;
   }
   if (r.stage === "due") {
     return `Hello! ${name}'s coaching fee at ${cfg.brand}${at} is due today.` +
       `${amt ? ` Amount: ${amt}.` : ""}` +
-      ` Kindly complete the payment to continue the batch.`;
+      ` Kindly complete the payment to continue the batch.${pay}`;
   }
   const n = r.days_since || 0;
   return `Hello! A gentle reminder that ${name}'s coaching fee at ${cfg.brand}${at} is pending` +
     `${n > 0 ? `, ${n} ${n === 1 ? "day" : "days"} overdue` : ""}.` +
     `${amt ? ` Amount: ${amt}.` : ""}` +
-    ` Please clear it so ${name} does not miss sessions. Do reply if you need any help.`;
+    ` Please clear it so ${name} does not miss sessions. Do reply if you need any help.${pay}`;
 }
 
 function templateFor(stage: string, cfg: WaConfig) {
@@ -202,10 +257,13 @@ async function sendTemplate(to: string, r: QueueRow, cfg: WaConfig): Promise<Sen
      money to Raj.
 
        {{1}} student   {{2}} academy   {{3}} amount   {{4}} due date
+       {{5}} where to pay  — only when config.whatsapp.upiParam is true
 
      The header is not decoration: a template approved WITH a media
      header must be SENT with one, or Meta rejects the message
-     outright. */
+     outright. The same is true of the count of body variables: send
+     five to a template approved with four and every message is
+     rejected, so {{5}} is opt-in per academy. */
   const body = {
     messaging_product: "whatsapp",
     to,
@@ -225,6 +283,12 @@ async function sendTemplate(to: string, r: QueueRow, cfg: WaConfig): Promise<Sen
             { type: "text", text: cfg.brand },
             { type: "text", text: r.amount != null ? money(r.amount) : "the coaching fee" },
             { type: "text", text: longDate(r.due_date) },
+            ...(cfg.upiParam
+              ? [{ type: "text",
+                   text: r.upi_id
+                     ? `${r.upi_id}${r.upi_name ? ` (${r.upi_name})` : ""}`
+                     : "the account shared with you" }]
+              : []),
           ],
         },
       ],
@@ -547,6 +611,17 @@ async function runRetries(tenant: string) {
       continue;
     }
 
+    /* A retry must name the same account the first attempt did, so it
+       resolves through the same Postgres function rather than sending
+       a blank or the academy default. Retries run within the hour, so
+       this is the same answer unless staff deliberately changed it. */
+    const [enr] = await db(
+      `/enrollments?id=eq.${ev.enrollment_id}&select=centre_id,batch_id`);
+    const upi = enr
+      ? await rpc("resolve_upi",
+          { p_tenant: tenant, p_centre: enr.centre_id, p_batch: enr.batch_id })
+      : null;
+
     const row: QueueRow = {
       enrollment_id: ev.enrollment_id, member_id: ev.member_id,
       member_name: m.name, parent_name: null,
@@ -555,6 +630,8 @@ async function runRetries(tenant: string) {
       due_date: ev.due_date, days_since: ev.overdue_days, stage: ev.stage,
       amount: ev.amount, months: ev.months, fee_source: "retry",
       whatsapp_status: m.whatsapp_status, blocked_reason: null, already_sent: false,
+      upi_id: upi?.vpa ?? null, upi_name: upi?.name ?? null,
+      upi_source: upi?.source ?? null,
     };
 
     const sent = await sendTemplate(wa91(row.phone), row, cfg);
@@ -595,7 +672,14 @@ async function handleWebhook(req: Request) {
     return new Response("forbidden", { status: 403 });
   }
 
-  const payload = await req.json().catch(() => ({}));
+  /* Read the body ONCE as text: the signature is computed over the raw
+     bytes, so parsing first and re-serialising would not reproduce it. */
+  const raw = await req.text();
+  if (!(await metaSignatureValid(raw, req.headers.get("x-hub-signature-256")))) {
+    return new Response("bad signature", { status: 401 });
+  }
+  let payload: any = {};
+  try { payload = JSON.parse(raw); } catch { payload = {}; }
   const statuses = payload?.entry?.[0]?.changes?.[0]?.value?.statuses || [];
 
   for (const s of statuses) {
@@ -656,7 +740,25 @@ Deno.serve(async (req) => {
   const tenant = url.searchParams.get("tenant") || DEFAULT_TENANT;
 
   try {
+    /* ---------- the door ----------
+       Everything below this point can send messages, spend Meta quota,
+       or read another academy's reminder queue, and `tenant` is a query
+       parameter. /webhook is the one route Meta itself calls, so it is
+       authenticated differently — by Meta's own signature — rather than
+       waved through. */
     if (route === "webhook") return await handleWebhook(req);
+
+    if (!FN_SECRET) {
+      // Fail closed. An unset secret used to mean "wide open"; it now
+      // means "not configured", which is a deployment error, not a
+      // licence to send.
+      console.error("AM_FN_SECRET is not set — refusing every call");
+      return json({ error: "function not configured" }, 503);
+    }
+    if (!secretsMatch(req.headers.get("x-am-secret") || "", FN_SECRET)) {
+      return json({ error: "unauthorized" }, 401);
+    }
+
     if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
     switch (route) {

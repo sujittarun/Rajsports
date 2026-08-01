@@ -1,4 +1,11 @@
 -- ============================================================
+-- This harness writes to SHARED tables. It refuses to run on
+-- production, where a failed rollback is a data incident for
+-- every academy — not just this one. (0040)
+-- ============================================================
+select assert_test_environment();
+
+-- ============================================================
 -- Functional tests for migration-raj.sql.
 -- Run with scripts/test-migration.sh — it concatenates the migration
 -- and this file inside one transaction and rolls the whole thing back,
