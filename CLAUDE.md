@@ -52,7 +52,8 @@ Raj Sports repo
 │   (coach.html is the attendance-only screen; everything else needs staff)
 ├── assets/css/app.css                               ← the design system
 ├── assets/js/{cloud.js, core.js}                    ← data layer + shell
-│   (the Android app is a SEPARATE repo: sujittarun/RajSportsApp)
+│   (the phone apps are SEPARATE repos: RajSportsApp for Android,
+│    RajSportsIOS for iOS. Same backend, same screens, same words.)
 └── supabase/
     ├── migration-raj.sql      schema + fee chain + payouts + WhatsApp tables
     ├── migration-raj-2.sql    public read for the timetable
@@ -204,9 +205,9 @@ number is approved. In manual mode:
 - the manager taps **WhatsApp** on the Reminders screen, which opens `wa.me`
   with the message pre-written and logs it via `log_manual_reminder()`.
 
-**The message wording is identical in all three places** —
-`App.reminderText()` (web), `Fmt.reminderText()` (Android) and
-`messageBody()` (edge function). If you change one, change all three. A parent
+**The message wording is identical in all four places** —
+`App.reminderText()` (web), `Fmt.reminderText()` (Android **and** iOS) and
+`messageBody()` (edge function). If you change one, change them all. A parent
 must hear one voice from Raj Sports regardless of which path sent it.
 
 That is now checked rather than remembered:
@@ -216,8 +217,8 @@ python3 scripts/check-message-parity.py
 ```
 
 It executes the web and edge builders against the same rows and compares them
-character for character, then asserts all three files, Android included, carry
-every sentence fragment. Reword one and the other two fail.
+character for character, then asserts all four files, Android and iOS included,
+carry every sentence fragment. Reword one and the rest fail.
 
 Going live is a **config flip, not a deploy**: set `enabled: true`,
 `mode: 'auto'`, `dryRun: false` on `tenants.config.whatsapp` once the WABA,
@@ -265,8 +266,10 @@ is one of two clients and will not always be the newest:
 - **Local dates only.** `toISOString()` is UTC and silently shifts an IST
   evening back a day, mis-stating a renewal. Web uses `App.isoDate()`, Android
   uses `Fmt.isoDate()`, Postgres uses `ist_today()`.
-- **Design tokens live in two twinned files**: `assets/css/app.css` and
-  `android-app/.../ui/Theme.kt`. Change one, change both.
+- **Design tokens live in three twinned files**: `assets/css/app.css`,
+  `RajSportsApp/.../ui/Theme.kt` and `RajSportsIOS/RajSports/Theme.swift`.
+  The two phone files use the **same `0xAARRGGBB` literals**, so the palettes
+  can be diffed by eye rather than trusted. Change one, change all three.
 
 ### The visual language: "GROUNDS"
 
@@ -294,13 +297,15 @@ SPORTS, so the lockup carries a coach's signature without bolting on a separate
 sports pictogram. Never a monogram in a rounded square, and no longer the
 stride mark (four sheared bars) that preceded it.
 
-It lives in exactly two places and they are twins: `App.brandLogoSVG()` /
-`App.markSVG()` in `assets/js/core.js`, and `BrandLockup()` / `BrandMark()` in
-`RajSportsApp/.../ui/Brand.kt`, which parses the **same path strings** so the
-two cannot drift. Change one, change the other, and keep the viewBox
-(360x176 for the lockup, 48x48 for the mark). The Android launcher icon is
-`ic_launcher_fg.xml`, where figure and ground swap because the icon background
-is evergreen. Grain and the top-of-page warmth are deliberately faint;
+It lives in exactly three places and they are twins: `App.brandLogoSVG()` /
+`App.markSVG()` in `assets/js/core.js`, `BrandLockup()` / `BrandMark()` in
+`RajSportsApp/.../ui/Brand.kt`, and the same pair in
+`RajSportsIOS/RajSports/Brand.swift`. Both phone files parse the **same path
+strings** at runtime, so the mark cannot drift into "nearly the same whistle".
+Change one, change all three, and keep the viewBox (360x176 for the lockup,
+48x48 for the mark). The Android launcher icon is `ic_launcher_fg.xml` and the
+iOS one is `Assets.xcassets/AppIcon.appiconset`; in both, figure and ground swap
+because the icon background is evergreen. Grain and the top-of-page warmth are deliberately faint;
 both are `position: fixed` and `pointer-events: none` so they never repaint on
 scroll.
 
@@ -410,7 +415,8 @@ so it fails when the guard is broken.
 
 ```bash
 npx http-server -p 8135 -c-1 .          # the web app
-cd android-app && ./gradlew :app:assembleDebug
+cd ../RajSportsApp && ./gradlew :app:assembleDebug
+open ../RajSportsIOS/RajSports.xcodeproj   # iOS, needs Xcode 16+
 python3 scripts/check-message-parity.py  # the reminder wording, all three clients
 ./scripts/dry-run.sh supabase/x.sql     # validate against live, roll back
 ./scripts/test-migration.sh             # behaviour tests, roll back

@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """The parent must hear one voice from Raj Sports.
 
-The reminder wording exists three times — App.reminderText() on the web,
-Fmt.reminderText() on Android and messageBody() in the edge function —
-because each runs somewhere the others cannot. Three copies drift, and
-the day they do a parent gets one message from the nightly cron and a
-different one from the manager's thumb.
+The reminder wording exists four times — App.reminderText() on the web,
+Fmt.reminderText() on Android and on iOS, and messageBody() in the edge
+function — because each runs somewhere the others cannot. Four copies
+drift, and the day they do a parent gets one message from the nightly
+cron and a different one from the manager's thumb.
 
-Two checks, because two are runnable and one is not:
+Two checks, because two are runnable and two are not:
 
   1. The web and the edge function are executed against the same rows
      and their output compared character for character.
-  2. All three, Android included, must contain every sentence fragment
-     the message is built from. Reword one and the other two fail.
+  2. All four, Android and iOS included, must contain every sentence
+     fragment the message is built from. Reword one and the rest fail.
 
     python3 scripts/check-message-parity.py
 """
@@ -25,10 +25,12 @@ import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ANDROID = os.path.join(os.path.dirname(ROOT), "RajSportsApp")
+IOS     = os.path.join(os.path.dirname(ROOT), "RajSportsIOS")
 
 WEB   = os.path.join(ROOT, "assets/js/core.js")
 EDGE  = os.path.join(ROOT, "supabase/functions/whatsapp-reminder/index.ts")
 KT    = os.path.join(ANDROID, "app/src/main/java/in/rajsports/manager/ui/Fmt.kt")
+SWIFT = os.path.join(IOS, "RajSports/Fmt.swift")
 
 # Every static fragment the message is assembled from. If a sentence is
 # reworded in one place, the other two no longer contain it.
@@ -157,7 +159,7 @@ def main() -> int:
 
     # ---- 2. all three must carry every fragment ----
     print()
-    for label, path in [("web", WEB), ("edge", EDGE), ("android", KT)]:
+    for label, path in [("web", WEB), ("edge", EDGE), ("android", KT), ("ios", SWIFT)]:
         if not os.path.exists(path):
             failures.append(f"missing {label}: {path}")
             continue
@@ -174,7 +176,7 @@ def main() -> int:
         for f in failures:
             print(f"  · {f}")
         print("\nA parent would hear two different voices from Raj Sports "
-              "depending on which path sent the message. Fix all three.")
+              "depending on which path sent the message. Fix them all.")
         return 1
     print("\n✓ one voice.")
     return 0
