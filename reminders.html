@@ -7,7 +7,7 @@
 <title>Reminders · Raj Sports</title>
 <link rel="icon" href="assets/img/favicon.svg">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="assets/css/app.css?v=13">
+<link rel="stylesheet" href="assets/css/app.css?v=14">
 <style>
   .mode {
     display: flex; gap: 11px; align-items: flex-start;
@@ -64,8 +64,8 @@
 
   <nav class="nav"></nav>
 
-<script src="assets/js/cloud.js?v=13"></script>
-<script src="assets/js/core.js?v=13"></script>
+<script src="assets/js/cloud.js?v=14"></script>
+<script src="assets/js/core.js?v=14"></script>
 <script>
 (function () {
   if (!App.requireStaff()) return;
@@ -187,6 +187,11 @@
         '<div class="row-main">' +
           '<div class="row-t">' + App.esc(r.member_name) + "</div>" +
           '<div class="row-s">' + App.esc(sub || "Not assigned") + "</div>" +
+          /* Which account this parent is being asked to pay. Raj coaches
+             at venues he does not own and some of them collect their own
+             fees, so the manager should be able to see that at a glance
+             rather than reading it back out of the message. */
+          (r.upi_id ? '<div class="row-s">Pays to ' + App.esc(r.upi_id) + "</div>" : "") +
         "</div>" +
         '<div class="row-end">' +
           '<div class="q-amt money">' + App.moneyOrDash(r.amount) + "</div>" +

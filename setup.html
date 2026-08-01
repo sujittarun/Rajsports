@@ -7,7 +7,7 @@
 <title>Setup · Raj Sports</title>
 <link rel="icon" href="assets/img/favicon.svg">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="assets/css/app.css?v=13">
+<link rel="stylesheet" href="assets/css/app.css?v=14">
 <style>
   body.setup-page { padding-bottom: max(24px, env(safe-area-inset-bottom, 0px)); }
   .setup-wrap { max-width: 760px; }
@@ -69,8 +69,8 @@
     <div id="view"></div>
   </main>
 
-<script src="assets/js/cloud.js?v=13"></script>
-<script src="assets/js/core.js?v=13"></script>
+<script src="assets/js/cloud.js?v=14"></script>
+<script src="assets/js/core.js?v=14"></script>
 <script>
 (function () {
   if (!App.requireStaff()) return;
@@ -78,7 +78,7 @@
   RS.track("page_view");
 
   var view = App.$("#view"), head = App.$("#setupHead"), ref = null;
-  var TABS = ["home", "fees", "centres", "sports", "whatsapp", "activity"];
+  var TABS = ["home", "fees", "centres", "sports", "staff", "whatsapp", "activity"];
   var tab = (location.hash || "#home").slice(1);
   if (TABS.indexOf(tab) < 0) tab = "home";
 
@@ -97,6 +97,7 @@
       fees: ["Fees & plans", "Set default rates, exceptions and longer plans."],
       centres: ["Centres, batches & coaches", "Manage venues, class times and who teaches."],
       sports: ["Sports offered", "Choose the sports students can join."],
+      staff: ["Attendance staff", "Who takes the register, and at which centres."],
       whatsapp: ["WhatsApp reminders", "Review the sending mode and parent message setup."],
       activity: ["Activity log", "Review recent setup changes."]
     }[tab];
@@ -104,6 +105,7 @@
     if (tab === "fees")     return renderFees();
     if (tab === "centres")  return renderCentres();
     if (tab === "sports")   return renderSports();
+    if (tab === "staff")    return renderStaff();
     if (tab === "activity") return renderActivity();
     return renderWhatsapp();
   }
@@ -118,7 +120,8 @@
       sports: '<path d="M8 4h8v4a4 4 0 0 1-8 0V4Z"/><path d="M8 6H4v2a4 4 0 0 0 4 4M16 6h4v2a4 4 0 0 1-4 4M12 12v5M8 21h8M9 17h6"/>',
       fees: '<path d="M4 7h11a4 4 0 0 1 0 8H4M4 11h14M4 15h6m0 0 6 6"/>',
       whatsapp: '<path d="M20 11a8 8 0 0 1-12 7l-4 1 1-4a8 8 0 1 1 15-4Z"/><path d="M9 8c1 3 2 4 5 5"/>',
-      activity: '<path d="M7 4h10v17H7zM9 2h6v4H9zM10 10h5M10 14h5M10 18h4"/>'
+      activity: '<path d="M7 4h10v17H7zM9 2h6v4H9zM10 10h5M10 14h5M10 18h4"/>',
+      staff: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/>'
     };
     return '<span class="setup-icon"><svg viewBox="0 0 24 24" aria-hidden="true">' + paths[kind] + '</svg></span>';
   }
@@ -143,16 +146,22 @@
       menuRow("centres", "centres", "Centres, batches & coaches", "Venues, class times and who teaches",
         centres + " centres · " + batches + " batches") +
       menuRow("sports", "sports", "Sports offered", "The sports students can join", sports + " active") +
+      menuRow("staff", "staff", "Attendance staff", "Who takes the register, and where", "Loading") +
       menuRow("fees", "fees", "Fees & plans", "Default rates, exceptions and longer plans", "Loading");
     App.$("#accountMenu").innerHTML =
       menuRow("whatsapp", "whatsapp", "WhatsApp reminders", "Sending mode and parent message setup", "Loading") +
       menuRow("activity", "activity", "Activity log", "Review recent setup changes", "");
-    Promise.all([RS.feeRules(), RS.tenantConfig()]).then(function (r) {
+    Promise.all([RS.feeRules(), RS.tenantConfig(), RS.staffScopes()]).then(function (r) {
       var fee = App.$('a[href="#fees"] .setup-link-state');
       var wa = App.$('a[href="#whatsapp"] .setup-link-state');
+      var st = App.$('a[href="#staff"] .setup-link-state');
       if (fee) fee.textContent = (r[0] || []).filter(function (x) { return x.active !== false; }).length + " rates";
       var w = (r[1] || {}).whatsapp || {};
       if (wa) wa.textContent = w.mode === "auto" ? "Automatic" : "Manual";
+      if (st) {
+        var n = (r[2] || []).filter(function (x) { return x.active !== false; }).length;
+        st.textContent = n ? n + (n === 1 ? " person" : " people") : "None yet";
+      }
     }).catch(function () {});
   }
   function refresh(after) {
@@ -357,6 +366,51 @@
     }
   }
 
+  /* ---------------- collection accounts ----------------
+     Raj coaches at venues he does not own, and several of them want the
+     parents' money in THEIR account. So "where does this fee get paid"
+     is a per-centre and sometimes per-batch fact.
+
+     The resolver lives in Postgres (resolve_upi), same as the fee chain,
+     so the id a parent is asked to pay and the one shown here cannot
+     drift apart. These fields only ever set one level; the fallback line
+     underneath states what happens when they are left blank. */
+  var UPI_RE = /^[a-zA-Z0-9._%+-]{2,64}@[a-zA-Z][a-zA-Z0-9.-]{1,32}$/;
+
+  function upiFields(row, whatBlankMeans) {
+    return '<div class="field"><label>UPI id for fees ' +
+        '<span class="hint">' + App.esc(whatBlankMeans) + '</span></label>' +
+        '<input class="input" id="upi" inputmode="email" autocapitalize="off" ' +
+        'spellcheck="false" placeholder="name@bank" value="' +
+        App.esc((row && row.upi_id) || "") + '"></div>' +
+      '<div class="field"><label>Payee name <span class="hint">what the parent sees in their UPI app</span></label>' +
+        '<input class="input" id="upin" value="' + App.esc((row && row.upi_name) || "") + '"></div>' +
+      '<p class="small muted" id="upiFallback" style="margin:-6px 0 14px"></p>';
+  }
+
+  /* Say where the number would come from if this box stays empty, in the
+     same words the Fees screen uses for a rate. */
+  function upiFallback(el, centreId, batchId) {
+    var host = App.$("#upiFallback", el);
+    if (!host) return;
+    RS.resolveUpi(centreId || null, batchId || null).then(function (u) {
+      host.textContent = !u || !u.vpa
+        ? "Left blank, no account is quoted and reminders go out without a payment line."
+        : "Left blank, parents are asked to pay " + u.vpa +
+          (u.source === "academy" ? " (the academy account)" : " (from the centre)") + ".";
+    }).catch(function () { host.textContent = ""; });
+  }
+
+  function readUpi(el) {
+    var v = App.$("#upi", el).value.trim();
+    if (v && !UPI_RE.test(v)) return { error: "That does not look like a UPI id. It should read like name@bank." };
+    return { upi: v || null, name: App.$("#upin", el).value.trim() || null };
+  }
+
+  function saveUpi(kind, id, u) {
+    return RS.setCollectionAccount(kind, id, u.upi, u.name);
+  }
+
   function centreSheet(c) {
     App.sheet({
       title: c ? "Edit centre" : "New centre",
@@ -368,14 +422,18 @@
           '" placeholder="DPS Miyapur"></div>' +
         '<div class="field"><label>Address <span class="hint">optional</span></label>' +
           '<input class="input" id="a" value="' + App.esc(c ? (c.address || "") : "") + '"></div>' +
+        upiFields(c, "leave blank to use the academy account") +
         (c ? '<label class="small" style="display:flex;gap:9px;align-items:center;margin-bottom:14px">' +
              '<input type="checkbox" id="ac"' + (c.active ? " checked" : "") +
              '> Open <span class="muted">unticking hides it without losing history</span></label>' : "") +
         '<button class="btn btn-primary btn-block" id="save">Save centre</button>',
       onMount: function (el) {
+        upiFallback(el, null, null);
         App.$("#save", el).addEventListener("click", function () {
           var btn = this, name = App.$("#n", el).value.trim();
           if (!name) { App.toast("Enter a name.", "bad"); return; }
+          var u = readUpi(el);
+          if (u.error) { App.toast(u.error, "bad"); return; }
           btn.disabled = true; btn.textContent = "Saving…";
           var ok = function () { App.closeSheet(); App.toast("Saved", "good"); refresh(renderCentres); };
           var no = function (e) { btn.disabled = false; btn.textContent = "Save centre";
@@ -383,10 +441,17 @@
           if (c) {
             RS.saveCentre(c.id, { name: name, short_name: App.$("#s", el).value.trim() || name,
               address: App.$("#a", el).value.trim() || null,
-              active: App.$("#ac", el).checked }).then(ok).catch(no);
+              active: App.$("#ac", el).checked })
+              .then(function () { return saveUpi("centre", c.id, u); })
+              .then(ok).catch(no);
           } else {
             RS.addCentre({ name: name, short_name: App.$("#s", el).value.trim() || null,
-              address: App.$("#a", el).value.trim() || null }).then(ok).catch(no);
+              address: App.$("#a", el).value.trim() || null })
+              .then(function (r) {
+                var id = r && (r.id || (r[0] && r[0].id));
+                return u.upi || u.name ? saveUpi("centre", id, u) : r;
+              })
+              .then(ok).catch(no);
           }
         });
       }
@@ -482,6 +547,7 @@
             ref.coaches.map(function (c) { return '<option value="' + c.id + '"' +
               (b && b.coach_id === c.id ? " selected" : "") + ">" + App.esc(c.name) + "</option>"; }).join("") +
           "</select></div>" +
+        upiFields(b, "leave blank to use this centre's account") +
         (b ? '<label class="small" style="display:flex;gap:9px;align-items:center;margin-bottom:14px">' +
              '<input type="checkbox" id="ac"' + (b.active ? " checked" : "") +
              '> Running <span class="muted">unticking closes it and frees its students</span></label>' +
@@ -489,9 +555,12 @@
         '<button class="btn btn-primary btn-block" id="save">Save batch</button>',
       onMount: function (el) {
         if (!b) wireDays(el);
+        upiFallback(el, b ? b.centre_id : centreId, null);
         App.$("#save", el).addEventListener("click", function () {
           var btn = this, name = App.$("#n", el).value.trim();
           if (!name) { App.toast("Name the batch.", "bad"); return; }
+          var u = readUpi(el);
+          if (u.error) { App.toast(u.error, "bad"); return; }
           var ok = function () { App.closeSheet(); App.toast("Saved", "good"); refresh(renderCentres); };
           var no = function (e) { btn.disabled = false; btn.textContent = "Save batch";
                                   App.toast(e.message || "Could not save.", "bad"); };
@@ -499,7 +568,9 @@
           if (b) {
             RS.saveBatch(b.id, { name: name, sport: App.$("#sp", el).value || null,
               coach_id: App.$("#co", el).value ? +App.$("#co", el).value : null,
-              active: App.$("#ac", el).checked }).then(ok).catch(no);
+              active: App.$("#ac", el).checked })
+              .then(function () { return saveUpi("batch", b.id, u); })
+              .then(ok).catch(no);
           } else {
             var days = readDays(el);
             var st = App.$("#st", el).value, et = App.$("#et", el).value;
@@ -507,7 +578,12 @@
             if (!st || !et || et <= st) { no({ message: "End time must be after the start time." }); return; }
             RS.addBatch({ centre_id: centreId, name: name, days: days, start_time: st, end_time: et,
               sport: App.$("#sp", el).value || null,
-              coach_id: App.$("#co", el).value ? +App.$("#co", el).value : null }).then(ok).catch(no);
+              coach_id: App.$("#co", el).value ? +App.$("#co", el).value : null })
+              .then(function (r) {
+                var id = r && (r.id || (r[0] && r[0].id));
+                return u.upi || u.name ? saveUpi("batch", id, u) : r;
+              })
+              .then(ok).catch(no);
           }
         });
       }
@@ -546,6 +622,106 @@
   /* ============================================================
      SPORTS
      ============================================================ */
+  /* ---------------- attendance staff ----------------
+     Coaches sign in with their own Supabase account and see one screen:
+     the register, for their centres only. Everything else the app can do
+     is closed to them at the database, not by hiding a button, so this
+     page only ever edits WHERE someone may mark, never WHAT they may
+     see. Adding the login itself is an account job, not a setup one. */
+  function renderStaff() {
+    App.skeleton(view, 3);
+    RS.staffScopes().then(function (rows) {
+      var centreName = function (id) {
+        var c = ref.centreById[id];
+        return c ? (c.short_name || c.name) : "a closed centre";
+      };
+      view.innerHTML =
+        '<div class="card"><div class="card-hd"><h2>Who takes the register</h2>' +
+          '<button class="btn btn-sm" id="addStaff" type="button">Add</button></div>' +
+          (rows.length ? '<div>' + rows.map(function (r) {
+            var where = (r.centre_ids || []).map(centreName).join(", ");
+            return '<div class="row" data-staff="' + r.id + '">' +
+              '<div class="avatar">' + App.esc(App.initials(r.name)) + '</div>' +
+              '<div class="row-main"><div class="row-t">' + App.esc(r.name) + '</div>' +
+              '<div class="row-s">' + App.esc(r.email) + '</div>' +
+              '<div class="row-s">' + App.esc(where || "No centre yet, so they see nothing") + '</div></div>' +
+              (r.active ? "" : '<span class="status is-pending">Off</span>') + '</div>';
+          }).join("") + '</div>'
+          : '<div class="empty"><div class="empty-t">Nobody added yet</div>' +
+            '<div class="small">Add a coach to let them take attendance for their own centres.</div></div>') +
+        '</div>' +
+        '<p class="small muted setup-foot">A coach can only open the register. Fees, ' +
+        'reminders and parent phone numbers stay closed to them.</p>';
+
+      App.$("#addStaff").addEventListener("click", function () { staffSheet(null); });
+      App.$$("[data-staff]", view).forEach(function (el) {
+        el.addEventListener("click", function () {
+          staffSheet(rows.filter(function (r) { return r.id === +el.dataset.staff; })[0]);
+        });
+      });
+    }).catch(function (e) { App.fail(view, e); });
+  }
+
+  function staffSheet(r) {
+    var picked = (r && r.centre_ids ? r.centre_ids.slice() : []);
+    var open = ref.centres.filter(function (c) { return c.active !== false; });
+    App.sheet({
+      title: r ? r.name : "Add attendance staff",
+      html:
+        '<div class="field"><label>Name</label><input class="input" id="n" value="' +
+          App.esc(r ? r.name : "") + '" placeholder="Ravi Kumar"></div>' +
+        '<div class="field"><label>Sign-in email ' +
+          '<span class="hint">' + (r ? "cannot be changed here" : "the account they will sign in with") +
+          '</span></label><input class="input" id="e" type="email" inputmode="email" ' +
+          'autocapitalize="off" spellcheck="false" value="' + App.esc(r ? r.email : "") + '"' +
+          (r ? " readonly" : "") + ' placeholder="coach@rajsports.in"></div>' +
+        '<div class="rail-step"><div class="rail-k"><span class="rail-n">1</span>' +
+          '<span>Centres they may mark</span></div>' +
+          '<div class="rail" id="cRail">' + open.map(function (c) {
+            return '<button class="chip" type="button" data-c="' + c.id + '" aria-pressed="' +
+              (picked.indexOf(c.id) >= 0) + '">' + App.esc(c.short_name || c.name) + '</button>';
+          }).join("") + '</div></div>' +
+        (r ? '<label class="small" style="display:flex;gap:9px;align-items:center;margin-bottom:14px">' +
+             '<input type="checkbox" id="ac"' + (r.active ? " checked" : "") +
+             '> Active <span class="muted">unticking signs them out of the register</span></label>' : "") +
+        '<button class="btn btn-primary btn-block" id="save">Save</button>',
+      onMount: function (el) {
+        App.$$("[data-c]", el).forEach(function (c) {
+          c.addEventListener("click", function () {
+            c.setAttribute("aria-pressed", String(c.getAttribute("aria-pressed") !== "true"));
+          });
+        });
+        App.$("#save", el).addEventListener("click", function () {
+          var btn = this;
+          var name = App.$("#n", el).value.trim();
+          var email = App.$("#e", el).value.trim();
+          var centres = App.$$("[data-c]", el)
+            .filter(function (c) { return c.getAttribute("aria-pressed") === "true"; })
+            .map(function (c) { return +c.dataset.c; });
+          if (!name)  { App.toast("Enter a name.", "bad"); return; }
+          if (!email) { App.toast("Enter the email they sign in with.", "bad"); return; }
+          if (!centres.length) {
+            App.toast("Pick at least one centre, or they will see nothing.", "bad"); return;
+          }
+          btn.disabled = true; btn.textContent = "Saving…";
+          RS.setStaffScope({ email: email, name: name, centres: centres,
+                             active: r ? App.$("#ac", el).checked : true })
+            .then(function (res) {
+              App.closeSheet();
+              App.toast(res && res.linked === false
+                ? "Saved. They can take the register once their sign-in is created."
+                : "Saved", "good");
+              renderStaff();
+            })
+            .catch(function (e) {
+              btn.disabled = false; btn.textContent = "Save";
+              App.toast(e.message || "Could not save.", "bad");
+            });
+        });
+      }
+    });
+  }
+
   function renderSports() {
     view.innerHTML =
       '<div class="note reveal">Adding a sport makes it available when you create a batch, enrol a ' +

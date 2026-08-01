@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f6f5f1">
+<title>Attendance · Raj Sports</title>
+<link rel="icon" href="assets/img/favicon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="assets/css/app.css?v=14">
+<style>
+  /* A coach has one job on one screen, so this page carries no nav and
+     no filters. It is a rail of their batches and a register. */
+  .coach-wrap { padding-bottom: 24px; }
+  .who { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:13px; }
+  .who h2 { font-size:19px; font-weight:700; margin:0; }
+  .who .small { color:var(--text-3); }
+  .daybar { display:flex; align-items:center; gap:8px; margin-bottom:14px; }
+  .daybar .btn { flex:none; }
+  .daybar input { width:auto; flex:1; min-width:0; }
+  .chip .tick { display:inline-block; margin-right:5px; opacity:.85; }
+  .chip[data-runs="false"] { opacity:.62; }
+  .roll-head { padding:15px 16px; border-bottom:1px solid var(--hair); }
+  .roll-foot {
+    display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap;
+    justify-content:space-between; padding:11px 16px; border-bottom:1px solid var(--hair);
+  }
+  .roll-actions { display:flex; gap:8px; }
+  /* Pills for anything pressable. "Not held" stays the quieter of the
+     two, but a bare word next to a pill does not read as a control. */
+  .roll-actions .btn-ghost { border:1px solid var(--hair-2); }
+  .roll-summary { display:flex; gap:14px; color:var(--text-2); font-size:12px; font-variant-numeric:tabular-nums; }
+  .roll-summary b { color:var(--text); font-size:17px; margin-right:3px; }
+  .attendance-row { padding:12px 13px; border-bottom:1px solid var(--hair); }
+  .attendance-row:last-child { border-bottom:0; }
+  .attendance-main { display:flex; align-items:center; gap:10px; min-width:0; }
+  .attendance-main .avatar { flex:none; }
+  .mark-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+  .attendance-mark {
+    display:flex; align-items:center; justify-content:center; gap:6px;
+    width:100%; padding:0 14px; white-space:nowrap; overflow:hidden;
+    min-height:44px; border:1px solid var(--hair-2); border-radius:var(--r-pill);
+    background:var(--raised); color:var(--text-2); font:inherit; font-size:13px;
+    font-weight:670; cursor:pointer;
+  }
+  .attendance-mark:disabled { opacity:.48; cursor:wait; }
+  .attendance-mark[data-status="present"][aria-pressed="true"] { background:var(--volt); border-color:var(--volt); color:var(--on-volt); }
+  .attendance-mark[data-status="absent"][aria-pressed="true"] { background:var(--overdue-haze); border-color:var(--overdue); color:var(--overdue); }
+  .auto-save { color:var(--text-3); font-size:11px; }
+  @media (min-width:700px) {
+    .attendance-row { display:grid; grid-template-columns:minmax(280px,1fr) minmax(220px,260px); align-items:center; gap:20px; padding:13px 16px; }
+    .mark-actions { margin:0; }
+  }
+</style>
+</head>
+<body>
+<header class="topbar"></header>
+<main class="wrap coach-wrap">
+  <div class="who">
+    <div><h2 id="whoName">Attendance</h2><div class="small" id="whoWhere"></div></div>
+  </div>
+
+  <div class="daybar">
+    <button class="btn btn-sm btn-ghost" id="dayBack" type="button" aria-label="Previous day">‹</button>
+    <input class="input" id="attDate" type="date" aria-label="Date">
+    <button class="btn btn-sm btn-ghost" id="dayFwd" type="button" aria-label="Next day">›</button>
+    <button class="btn btn-sm" id="dayToday" type="button">Today</button>
+  </div>
+
+  <div class="rail-step" id="batchStep">
+    <div class="rail-k"><span class="rail-n">1</span><span>Choose your batch</span></div>
+    <div class="rail" id="batchRail"></div>
+  </div>
+
+  <section class="section"><div class="card" id="register"></div></section>
+</main>
+
+<script src="assets/js/cloud.js?v=14"></script>
+<script src="assets/js/core.js?v=14"></script>
+<script>
+(function () {
+  if (!App.requireSignedIn()) return;
+  App.shell(null, "Attendance", { minimal: true });
+  RS.track("page_view");
+
+  var dateEl = App.$("#attDate"), rail = App.$("#batchRail"), register = App.$("#register");
+  var batches = [], batch = null, roster = [], marks = {}, saving = {};
+  var sessionStatus = null, sessionSavedAt = null;
+
+  dateEl.value = App.isoDate();
+  dateEl.max = App.isoDate();          // the register cannot run ahead of the day
+
+  RS.access().then(function (a) {
+    var where = (a.centres || []).map(function (c) { return c.name; }).join(", ");
+    App.$("#whoName").textContent = a.role === "coach" ? "Your batches" : "Attendance";
+    App.$("#whoWhere").textContent = where || (a.email || "");
+  });
+
+  /* ---------------- the batch rail ---------------- */
+  function loadBatches() {
+    rail.innerHTML = '<div class="skeleton skeleton-row" style="width:150px"></div>' +
+                     '<div class="skeleton skeleton-row" style="width:120px"></div>';
+    RS.myAttendanceBatches(dateEl.value).then(function (rows) {
+      // Today's classes first: that is what the coach is standing in
+      // front of. Everything else stays reachable for a makeup session.
+      batches = (rows || []).slice().sort(function (a, b) {
+        return (b.runs_today ? 1 : 0) - (a.runs_today ? 1 : 0);
+      });
+      if (!batches.length) {
+        rail.innerHTML = "";
+        App.empty(register, "No batches assigned yet",
+          "Ask the academy to add your centre so your batches appear here.");
+        return;
+      }
+      if (!batch || !batches.some(function (b) { return b.batch_id === batch.batch_id; })) {
+        batch = batches[0];
+      } else {
+        batch = batches.filter(function (b) { return b.batch_id === batch.batch_id; })[0];
+      }
+      renderRail();
+      loadRoster();
+    }).catch(function (e) { rail.innerHTML = ""; App.fail(register, e); });
+  }
+
+  function renderRail() {
+    rail.innerHTML = batches.map(function (b) {
+      var done = b.students > 0 && b.marked >= b.students;
+      return '<button class="chip" type="button" data-batch="' + b.batch_id + '"' +
+        ' data-runs="' + (b.runs_today ? "true" : "false") + '"' +
+        ' aria-pressed="' + (batch && b.batch_id === batch.batch_id) + '">' +
+        (done ? '<span class="tick" aria-hidden="true">✓</span>' : "") +
+        App.esc(b.centre_name + " · " + b.batch_name) +
+        "<small>" + App.esc(label(b)) + "</small></button>";
+    }).join("");
+    App.$$("[data-batch]", rail).forEach(function (el) {
+      el.addEventListener("click", function () {
+        batch = batches.filter(function (b) { return b.batch_id === +el.dataset.batch; })[0];
+        renderRail();
+        loadRoster();
+      });
+    });
+  }
+
+  function label(b) {
+    var t = [App.timeOf(b.start_time), App.timeOf(b.end_time)].filter(Boolean).join(" to ");
+    var bits = [];
+    if (t) bits.push(t);
+    if (!b.runs_today) bits.push("not scheduled");
+    else if (b.students) bits.push(b.marked + " of " + b.students + " marked");
+    return bits.join(" · ");
+  }
+
+  /* ---------------- the register ---------------- */
+  function loadRoster() {
+    if (!batch) return;
+    App.skeleton(register, 4); marks = {}; saving = {};
+    RS.attendanceRoster(batch.batch_id, dateEl.value).then(function (rows) {
+      roster = rows || [];
+      roster.forEach(function (r) {
+        if (r.attendance_status) marks[r.enrollment_id] = { status: r.attendance_status };
+      });
+      sessionStatus  = roster.length ? roster[0].session_status : null;
+      sessionSavedAt = roster.length ? roster[0].session_marked_at : null;
+      renderRoster();
+    }).catch(function (e) { App.fail(register, e); });
+  }
+
+  function renderRoster() {
+    if (!roster.length) {
+      App.empty(register, "No students in this batch",
+        "Nobody is enrolled here on " + App.longDate(dateEl.value) + ".");
+      return;
+    }
+    register.innerHTML =
+      '<div class="roll-head">' +
+        "<h2>" + App.esc(batch.centre_name) + "</h2>" +
+        '<div class="row-s">' + App.esc(batch.batch_name +
+          (batch.sport ? " · " + App.cap(batch.sport) : "")) + "</div>" +
+        '<div class="row-s">' + App.esc(App.longDate(dateEl.value)) +
+          (sessionSavedAt ? " · saved " + App.relativeTime(sessionSavedAt)
+                          : ' · <span class="auto-save">saves as you tap</span>') + "</div>" +
+      "</div>" +
+      (sessionStatus === "cancelled"
+        ? '<div class="empty"><div class="empty-t">Session not held</div>' +
+          '<div class="small">Choose Present or Absent to reopen this session.</div></div>' : "") +
+      '<div class="roll-foot"><div class="roll-summary">' +
+        '<span><b id="pCount">0</b>present</span>' +
+        '<span><b id="aCount">0</b>absent</span>' +
+        '<span><b id="uCount">0</b>left</span>' +
+      "</div>" +
+      '<div class="roll-actions">' +
+        '<button class="btn btn-sm" id="allPresent" type="button">All present</button>' +
+        '<button class="btn btn-sm btn-ghost" id="cancelSession" type="button">Not held</button>' +
+      "</div></div>" +
+      "<div>" + roster.map(rowHtml).join("") + "</div>";
+
+    App.$("#allPresent").addEventListener("click", markAllPresent);
+    App.$("#cancelSession").addEventListener("click", cancelSession);
+    App.$$("[data-mark]", register).forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        toggleMark(+btn.dataset.mark, btn.dataset.status);
+      });
+    });
+    updateCounts();
+  }
+
+  /* A coach sees the student and the parent's name, never a phone
+     number and never a rupee. The roster function returns the phone for
+     the manager's screen; this one simply does not show it. */
+  function rowHtml(r) {
+    var m = marks[r.enrollment_id] || {};
+    var sub = [r.parent_name, r.sport ? App.cap(r.sport) : null].filter(Boolean).join(" · ");
+    function mark(status, glyph, word) {
+      var on = m.status === status;
+      return '<button class="attendance-mark" data-mark="' + r.enrollment_id + '"' +
+        ' data-status="' + status + '" aria-pressed="' + on + '"' +
+        (saving[r.enrollment_id] ? " disabled" : "") +
+        ' aria-label="' + (on ? "Clear " + word + " for " : "Mark ") + App.esc(r.member_name) +
+        (on ? "" : " " + word) + '">' + glyph + " " + App.cap(word) + "</button>";
+    }
+    return '<div class="attendance-row"><div class="attendance-main">' +
+      '<div class="avatar">' + App.esc(App.initials(r.member_name)) + "</div>" +
+      '<div class="row-main"><div class="row-t">' + App.esc(r.member_name) + "</div>" +
+      '<div class="row-s">' + App.esc(sub) + "</div></div></div>" +
+      '<div class="mark-actions">' + mark("present", "✓", "present") + mark("absent", "×", "absent") + "</div></div>";
+  }
+
+  function updateCounts() {
+    var values = Object.keys(marks).map(function (k) { return marks[k].status; });
+    var p = values.filter(function (x) { return x === "present"; }).length;
+    var a = values.filter(function (x) { return x === "absent"; }).length;
+    App.$("#pCount").textContent = p;
+    App.$("#aCount").textContent = a;
+    App.$("#uCount").textContent = roster.length - p - a;
+  }
+
+  function toggleMark(id, status) {
+    if (saving[id]) return;
+    var old  = marks[id] ? { status: marks[id].status } : null;
+    var next = old && old.status === status ? null : { status: status };
+    if (next) marks[id] = next; else delete marks[id];
+    saving[id] = true; renderRoster();
+    RS.markAttendance({ batch: batch.batch_id, date: dateEl.value, enrollment: id,
+                        status: next && next.status })
+      .then(function (result) {
+        delete saving[id];
+        sessionStatus  = result.session_id ? "held" : null;
+        sessionSavedAt = result.session_id ? result.saved_at : null;
+        batch.marked = result.marked;
+        RS.track("attendance_marked", { batch: batch.batch_id, date: dateEl.value,
+                                        status: next && next.status, by: "coach" });
+        renderRoster(); renderRail();
+      })
+      .catch(function (e) {
+        delete saving[id];
+        if (old) marks[id] = old; else delete marks[id];
+        renderRoster(); App.toast(e.message, "bad");
+      });
+  }
+
+  function markAllPresent() {
+    var btn = this; btn.disabled = true; btn.textContent = "Saving…";
+    // Sequential, not parallel: every one of these writes the same
+    // session row, and a burst of them races on the upsert.
+    roster.reduce(function (chain, r) {
+      return chain.then(function () {
+        return RS.markAttendance({ batch: batch.batch_id, date: dateEl.value,
+                                   enrollment: r.enrollment_id, status: "present" });
+      });
+    }, Promise.resolve())
+      .then(function () { App.toast("Everyone marked present", "good"); loadRoster(); loadBatches(); })
+      .catch(function (e) {
+        btn.disabled = false; btn.textContent = "All present";
+        App.toast(e.message, "bad");
+      });
+  }
+
+  function cancelSession() {
+    App.sheet({
+      title: "Session not held",
+      html: '<div class="field"><label>Reason</label>' +
+            '<input class="input" id="cancelWhy" placeholder="Rain, holiday, venue unavailable"></div>' +
+            '<button class="btn btn-primary btn-block" id="confirmCancel">Save as not held</button>',
+      onMount: function (el) {
+        App.$("#confirmCancel", el).addEventListener("click", function () {
+          var why = App.$("#cancelWhy", el).value.trim();
+          if (!why) { App.toast("Add a reason.", "bad"); return; }
+          this.disabled = true;
+          RS.saveAttendance({ batch: batch.batch_id, date: dateEl.value,
+                              status: "cancelled", cancelReason: why })
+            .then(function () {
+              App.closeSheet(); App.toast("Session marked as not held");
+              loadRoster(); loadBatches();
+            })
+            .catch(function (e) { App.toast(e.message, "bad"); });
+        });
+      }
+    });
+  }
+
+  /* ---------------- the day ---------------- */
+  function shiftDay(n) {
+    var d = App.parseDate(dateEl.value) || new Date();
+    d.setDate(d.getDate() + n);
+    if (App.isoDate(d) > App.isoDate()) { App.toast("Attendance cannot be taken ahead of today."); return; }
+    dateEl.value = App.isoDate(d);
+    loadBatches();
+  }
+  App.$("#dayBack").addEventListener("click", function () { shiftDay(-1); });
+  App.$("#dayFwd").addEventListener("click", function () { shiftDay(1); });
+  App.$("#dayToday").addEventListener("click", function () {
+    dateEl.value = App.isoDate(); loadBatches();
+  });
+  dateEl.addEventListener("change", loadBatches);
+
+  loadBatches();
+})();
+</script>
+</body>
+</html>

@@ -7,7 +7,7 @@
 <title>Sign in · Raj Sports</title>
 <link rel="icon" href="assets/img/favicon.svg">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="assets/css/app.css?v=13">
+<link rel="stylesheet" href="assets/css/app.css?v=14">
 <style>
   body { padding-bottom: 0; display: grid; place-items: center; min-height: 100svh; }
   .login { width: min(400px, calc(100vw - 32px)); }
@@ -22,12 +22,12 @@
         <label for="email">Email</label>
         <input class="input" id="email" type="email" autocomplete="username"
                inputmode="email" autocapitalize="off" spellcheck="false"
-               value="staff@rajsports.in" required>
+               required>
       </div>
       <div class="field">
         <label for="pw">Password</label>
         <input class="input" id="pw" type="password" autocomplete="current-password"
-               value="abhp8FGyKo2wnJhaZiQf" required>
+               required>
       </div>
       <div id="err" class="small hide" style="color:var(--overdue);margin-bottom:12px"></div>
       <button class="btn btn-primary btn-block" id="go" type="submit">Sign in</button>
@@ -37,17 +37,22 @@
     </p>
   </main>
 
-<script src="assets/js/cloud.js?v=13"></script>
-<script src="assets/js/core.js?v=13"></script>
+<script src="assets/js/cloud.js?v=14"></script>
+<script src="assets/js/core.js?v=14"></script>
 <script>
 (function () {
   App.$("#brand").innerHTML = App.brandLogoSVG(224);
   var form = App.$("#form"), err = App.$("#err"), go = App.$("#go");
   if (RS.signedIn()) location.replace(next());
 
+  /* Where to land. A coach can only reach the attendance functions, so
+     sending them to a manager screen would open a wall of empty lists.
+     The requested page is honoured only if their role can load it. */
   function next() {
+    var home = App.homeFor(RS.role());
+    if (home === "coach.html") return home;
     var q = new URLSearchParams(location.search).get("next");
-    return (q && /^[a-z-]+\.html$/.test(q)) ? q : "today.html";
+    return (q && /^[a-z-]+\.html$/.test(q)) ? q : home;
   }
 
   form.addEventListener("submit", function (e) {

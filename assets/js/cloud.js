@@ -14,7 +14,7 @@
 (function () {
   "use strict";
 
-  var APP_VER = "13";  // keep in step with the ?v= cache-buster in the HTML
+  var APP_VER = "14";  // keep in step with the ?v= cache-buster in the HTML
   var PROJECT = "https://ugsklcipzyiogxynshnh.supabase.co";
   var BASE    = PROJECT + "/rest/v1";
   var AUTH    = PROJECT + "/auth/v1";
@@ -295,6 +295,56 @@
     });
   }
 
+  /* ---------------- who am I, and what may I do ----------------
+     The JWT already carries the role, so routing does not wait on the
+     network. The centre list does need a round trip, so it is cached
+     for the tab's life: a coach's assignment does not change while
+     they are taking a register. */
+  var accessCache = null;
+  function access() {
+    var s = session() || {};
+    if (accessCache) return Promise.resolve(accessCache);
+    return rpc("my_access").then(function (a) {
+      accessCache = a || {};
+      return accessCache;
+    }).catch(function () {
+      return { role: s.role || "", tenant: s.tenant || "", email: s.email || "", centres: [] };
+    });
+  }
+  function role() { var s = session(); return (s && s.role) || ""; }
+
+  /* The only way a coach discovers batches. Staff get every batch back
+     from the same call, so one screen serves both. */
+  function myAttendanceBatches(onDate) {
+    return rpc("my_attendance_batches", { p_tenant: TENANT, p_date: onDate || null });
+  }
+
+  /* ---------------- collection accounts ----------------
+     Which UPI id a parent is asked to pay. Resolved in Postgres so the
+     message, the screen and the reminder engine cannot disagree. */
+  function resolveUpi(centre, batch) {
+    return rpc("resolve_upi", {
+      p_tenant: TENANT, p_centre: centre || null, p_batch: batch || null
+    });
+  }
+  function setCollectionAccount(kind, id, upi, name) {
+    return rpc("set_collection_account", {
+      p_tenant: TENANT, p_kind: kind, p_id: id,
+      p_upi: upi || null, p_name: name || null
+    });
+  }
+
+  /* ---------------- attendance staff ---------------- */
+  function staffScopes() {
+    return get("/staff_scopes?" + T + "&select=*&order=name");
+  }
+  function setStaffScope(a) {
+    return rpc("set_staff_scope", {
+      p_tenant: TENANT, p_email: a.email, p_name: a.name,
+      p_centres: a.centres || [], p_active: a.active !== false
+    });
+  }
+
   /* ---------------- payouts ---------------- */
   function payoutRules() {
     return get("/payout_rules?" + T + "&select=*&order=party,id");
@@ -449,6 +499,7 @@
     signOut: clear,
     session: session,
     signedIn: function () { var s = session(); return !!(s && s.access_token); },
+    access: access, role: role,
     // data
     reference: reference, invalidate: invalidate,
     students: students, student: student, timeline: timeline,
@@ -461,6 +512,9 @@
     attendanceRoster: attendanceRoster, saveAttendance: saveAttendance,
     markAttendance: markAttendance,
     attendanceHistory: attendanceHistory, attendanceDashboard: attendanceDashboard,
+    myAttendanceBatches: myAttendanceBatches,
+    staffScopes: staffScopes, setStaffScope: setStaffScope,
+    resolveUpi: resolveUpi, setCollectionAccount: setCollectionAccount,
     payoutRules: payoutRules, savePayoutRule: savePayoutRule,
     deletePayoutRule: deletePayoutRule, payouts: payouts,
     computePayouts: computePayouts, markPayoutPaid: markPayoutPaid,

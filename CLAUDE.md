@@ -47,7 +47,9 @@ coaching client reuses them.
 ```
 Raj Sports repo
 ├── index.html · login.html · today.html · students.html · student.html
-│   reminders.html · fees.html · setup.html          ← the web app (root = GitHub Pages)
+│   reminders.html · fees.html · setup.html · attendance.html
+│   coach.html                                       ← the web app (root = GitHub Pages)
+│   (coach.html is the attendance-only screen; everything else needs staff)
 ├── assets/css/app.css                               ← the design system
 ├── assets/js/{cloud.js, core.js}                    ← data layer + shell
 │   (the Android app is a SEPARATE repo: sujittarun/RajSportsApp)
@@ -162,6 +164,35 @@ The ladder (ported from the proven Gen Alpha engine):
 - `reminder_events` has a partial unique index on `(tenant, enrollment,
   ist_date)`: one reminder per student per IST day, always.
 
+### Where the parent pays
+
+Raj coaches at venues he does not own, and several of them want the parents'
+money in **their** account. So "where does this fee get paid" is a per-centre
+and sometimes per-batch fact, and like every other money rule it resolves in
+Postgres — `resolve_upi()`, migration `0038`:
+
+```
+45  batches.upi_id    "the 7am batch collects to its own account"
+30  centres.upi_id    "everything at BTV collects to BTV"
+10  tenants.config.billing.upiIds[0]   the academy's own default
+```
+
+`reminder_queue()` returns `upi_id`, `upi_name` and `upi_source` alongside the
+fee, so the message, the manager's screen and the reminder engine cannot
+disagree about which account a parent was asked to pay. Set it in
+Setup → Centres, on the centre or on the batch; blank means "use the level
+above", and the sheet says so out loud.
+
+It goes out as a plain UPI id, not a `upi://` link. WhatsApp does not reliably
+make one tappable, and a "tap to pay" that does nothing is worse than an id a
+parent can paste into any UPI app.
+
+**On the automatic path it needs an approved template.** The four template
+variables are `{{1}}` student, `{{2}}` academy, `{{3}}` amount, `{{4}}` due
+date. The account would be `{{5}}`, and sending a fifth parameter to a template
+approved with four makes Meta reject every message — so it is gated behind
+`config.whatsapp.upiParam`, off until the template really carries it.
+
 ### Manual mode is first-class, not a stub
 
 `tenants.config.whatsapp.mode` is `manual` until Raj's own WhatsApp Business
@@ -177,6 +208,16 @@ number is approved. In manual mode:
 `App.reminderText()` (web), `Fmt.reminderText()` (Android) and
 `messageBody()` (edge function). If you change one, change all three. A parent
 must hear one voice from Raj Sports regardless of which path sent it.
+
+That is now checked rather than remembered:
+
+```bash
+python3 scripts/check-message-parity.py
+```
+
+It executes the web and edge builders against the same rows and compares them
+character for character, then asserts all three files, Android included, carry
+every sentence fragment. Reword one and the other two fail.
 
 Going live is a **config flip, not a deploy**: set `enabled: true`,
 `mode: 'auto'`, `dryRun: false` on `tenants.config.whatsapp` once the WABA,
@@ -248,8 +289,18 @@ An earlier build used an optic-lime accent on near-black. It was rejected as
 too harsh on the eye. If you are tempted back toward a high-chroma accent,
 remember the screen is read in sunlight between batches, not at a desk.
 
-The logo is the **stride mark** (four sheared bars climbing), never a monogram
-in a rounded square. Grain and the top-of-page warmth are deliberately faint;
+The logo is the **whistle**: it is the J in RAJ, and its lanyard returns under
+SPORTS, so the lockup carries a coach's signature without bolting on a separate
+sports pictogram. Never a monogram in a rounded square, and no longer the
+stride mark (four sheared bars) that preceded it.
+
+It lives in exactly two places and they are twins: `App.brandLogoSVG()` /
+`App.markSVG()` in `assets/js/core.js`, and `BrandLockup()` / `BrandMark()` in
+`RajSportsApp/.../ui/Brand.kt`, which parses the **same path strings** so the
+two cannot drift. Change one, change the other, and keep the viewBox
+(360x176 for the lockup, 48x48 for the mark). The Android launcher icon is
+`ic_launcher_fg.xml`, where figure and ground swap because the icon background
+is evergreen. Grain and the top-of-page warmth are deliberately faint;
 both are `position: fixed` and `pointer-events: none` so they never repaint on
 scroll.
 
@@ -281,21 +332,58 @@ card. All of it collapses under `prefers-reduced-motion`.
 
 ## Auth
 
-Lockdown is ON. Staff sign in as real Supabase Auth users whose `app_metadata`
-is `{am_role:'staff', tenant_id:'raj'}`. The dummy login for this build is
-`staff@rajsports.in`; the password is in `~/.supabase/am-dummy-logins.txt`.
-Replace it with a real account before handover and strip the dummy.
+Lockdown is ON. Two signed-in roles, both real Supabase Auth users:
+
+| `app_metadata.am_role` | sees | lands on |
+|---|---|---|
+| `staff` | everything | `today.html` |
+| `coach` | the register, at their own centres only | `coach.html` |
+
+Passwords live in `~/.supabase/am-dummy-logins.txt` (mode 600), never in the
+repo — `login.html` used to prefill the staff password and that file is served
+publicly by GitHub Pages, so it was a live credential on the open web. Replace
+these with real accounts before handover.
 
 Anon may read only `centres`, `batches`, `sports` (the public timetable) and
 insert into `applications` (the enrolment form). Nothing with a person or a
 rupee in it is readable without a staff token — `migration-raj-2.sql` asserts
 this rather than trusting the policy text.
 
+### The coach role, and why it is shaped this way
+
+A coach takes the register. They are not the people who see fees, reminders or
+a parent's phone number. Migration `0039` (shared scope) adds:
+
+- `staff_scopes` — who is assigned to which centres.
+- `my_centres(tenant)`, `my_attendance_batches(tenant, date)`, `my_access()` —
+  the only way a coach discovers anything. `my_access()` is what both clients
+  route on after sign-in.
+- `assert_attendance_access(tenant, batch)` — replaces `assert_staff_or_service`
+  in `mark_attendance`, `attendance_roster` and `save_attendance_session`.
+
+**`assert_staff()` was deliberately NOT loosened.** That one line guards
+`record_fee_payment`, `reminder_queue`, payouts and every other definer
+function on the platform; widening it to let a coach mark a register would
+have handed them the whole academy. A coach passes no RLS policy either
+(every one tests `auth_role() = 'staff'`), so the tables return nothing to
+them and the guarded functions are their entire reach.
+
+`attendance_history()` and `attendance_dashboard()` keep the staff guard on
+purpose: their `p_batch` is an optional **filter**, so a per-batch check would
+wave a null straight through and hand over every centre.
+
+The proof is behavioural, not a reading of the grants:
+`AcademyManager/supabase/tests/0039-attendance-access.sql` signs in as a coach
+and asserts what they can and cannot reach. Run it with
+`AcademyManager/scripts/run-test.sh <migration> <test>`; it is mutation-tested,
+so it fails when the guard is broken.
+
 ## Working on this
 
 ```bash
 npx http-server -p 8135 -c-1 .          # the web app
 cd android-app && ./gradlew :app:assembleDebug
+python3 scripts/check-message-parity.py  # the reminder wording, all three clients
 ./scripts/dry-run.sh supabase/x.sql     # validate against live, roll back
 ./scripts/test-migration.sh             # behaviour tests, roll back
 ../AcademyManager/scripts/migrate.sh --scope raj supabase/x.sql   # apply for real (ledger-checked)

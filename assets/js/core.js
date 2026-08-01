@@ -401,29 +401,43 @@
      The exact words a parent reads. Kept identical to Fmt.reminderText()
      in the Android app and messageBody() in the edge function, so a
      hand-sent and an auto-sent reminder are indistinguishable. */
+  /* Where this parent pays. The account is resolved in Postgres by
+     resolve_upi() (batch, then centre, then the academy) and arrives on
+     the queue row, so a BTV parent and a Pushpak parent are told
+     different accounts without either client deciding which.
+
+     A plain UPI id, not a upi:// link: WhatsApp does not reliably turn
+     one into something tappable, and a "tap to pay" that does nothing
+     is worse than an id a parent can paste into any UPI app. */
+  function upiLine(r) {
+    if (!r || !r.upi_id) return "";
+    return " Pay to UPI: " + r.upi_id + (r.upi_name ? " (" + r.upi_name + ")" : "") + ".";
+  }
+
   function reminderText(r, cfg) {
     var brand = (cfg && cfg.brand) || "Raj Sports";
     var name = r.member_name || "your child";
     var amt = r.amount != null ? money(r.amount) : "";
     var where = [r.centre, r.sport ? cap(r.sport) : null].filter(Boolean).join(", ");
     var at = where ? " (" + where + ")" : "";
+    var pay = upiLine(r);
 
     if (r.stage === "heads_up") {
       return "Hello! " + name + "'s coaching fee at " + brand + at +
         " is due on " + longDate(r.due_date) + "." +
         (amt ? " Amount: " + amt + "." : "") +
-        " Sharing this early so you can plan.";
+        " Sharing this early so you can plan." + pay;
     }
     if (r.stage === "due") {
       return "Hello! " + name + "'s coaching fee at " + brand + at + " is due today." +
         (amt ? " Amount: " + amt + "." : "") +
-        " Kindly complete the payment to continue the batch.";
+        " Kindly complete the payment to continue the batch." + pay;
     }
     var n = r.days_since || 0;
     return "Hello! A gentle reminder that " + name + "'s coaching fee at " + brand + at +
       " is pending" + (n > 0 ? ", " + n + (n === 1 ? " day" : " days") + " overdue" : "") + "." +
       (amt ? " Amount: " + amt + "." : "") +
-      " Please clear it so " + name + " does not miss sessions. Do reply if you need any help.";
+      " Please clear it so " + name + " does not miss sessions. Do reply if you need any help." + pay;
   }
 
   function waLink(phone, text) {
@@ -452,19 +466,21 @@
     { href: "fees.html",      key: "fees",      label: "Fees" }
   ];
 
-  function shell(active, title) {
+  function shell(active, title, opts) {
+    opts = opts || {};
     var top = document.querySelector(".topbar");
     if (top && !top.dataset.built) {
       top.dataset.built = "1";
       top.innerHTML =
         '<div class="topbar-in">' +
-          '<a class="topbar-brand" href="today.html" aria-label="Go to Today">' +
+          '<a class="topbar-brand" href="' + (opts.minimal ? "coach.html" : "today.html") +
+          '" aria-label="Go to ' + (opts.minimal ? "Attendance" : "Today") + '">' +
             brandLogoSVG(92, "brand-logo--topbar") +
           "</a>" +
           "<h1>" + esc(title || "Raj Sports") + "</h1>" +
           '<button class="icon-btn" data-theme-toggle aria-label="Switch theme">' +
             (resolved() === "dark" ? "☀" : "☾") + "</button>" +
-          (active === "setup" ? "" :
+          (active === "setup" || opts.minimal ? "" :
             '<a class="icon-btn" href="setup.html" aria-label="Open setup">' +
               '<svg viewBox="0 0 24 24" aria-hidden="true">' + ICONS.setup + "</svg></a>") +
           '<button class="icon-btn" data-signout aria-label="Sign out">' +
@@ -520,7 +536,22 @@
     link.querySelector("svg").insertAdjacentElement("afterend", b);
   }
 
+  /* Where a signed-in person belongs. A coach can only reach the
+     attendance functions, so every other screen would load as a wall of
+     empty lists and permission errors. Send them to the one page that
+     works instead of letting them discover that themselves. */
+  function homeFor(role) { return role === "coach" ? "coach.html" : "today.html"; }
+
   function requireStaff() {
+    if (!RS.signedIn()) {
+      location.replace("login.html?next=" + encodeURIComponent(location.pathname.split("/").pop()));
+      return false;
+    }
+    if (RS.role() === "coach") { location.replace("coach.html"); return false; }
+    return true;
+  }
+
+  function requireSignedIn() {
     if (!RS.signedIn()) {
       location.replace("login.html?next=" + encodeURIComponent(location.pathname.split("/").pop()));
       return false;
@@ -570,7 +601,8 @@
     countUp: countUp, countMoney: countMoney,
     swipeRow: swipeRow, tabInk: tabInk, navBadge: navBadge,
     toast: toast, sheet: sheet, closeSheet: closeSheet, confirm: confirmSheet,
-    shell: shell, requireStaff: requireStaff,
+    shell: shell, requireStaff: requireStaff, requireSignedIn: requireSignedIn,
+    homeFor: homeFor,
     $: $, $$: $$, el: el, skeleton: skeleton, fail: fail, empty: empty
   };
 })();
