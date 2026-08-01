@@ -14,7 +14,7 @@
 (function () {
   "use strict";
 
-  var APP_VER = "14";  // keep in step with the ?v= cache-buster in the HTML
+  var APP_VER = "15";  // keep in step with the ?v= cache-buster in the HTML
   var PROJECT = "https://ugsklcipzyiogxynshnh.supabase.co";
   var BASE    = PROJECT + "/rest/v1";
   var AUTH    = PROJECT + "/auth/v1";
@@ -319,6 +319,16 @@
     return rpc("my_attendance_batches", { p_tenant: TENANT, p_date: onDate || null });
   }
 
+  /* One batch, one window: the calendar, the rates and where each
+     student stands. p_batch is a target rather than a filter, which is
+     what lets a coach call it at all. One round trip because the three
+     answers share a scan and always belong to the same window. */
+  function attendanceInsights(batch, from, to) {
+    return rpc("my_attendance_insights", {
+      p_tenant: TENANT, p_batch: batch, p_from: from || null, p_to: to || null
+    });
+  }
+
   /* ---------------- collection accounts ----------------
      Which UPI id a parent is asked to pay. Resolved in Postgres so the
      message, the screen and the reminder engine cannot disagree. */
@@ -513,6 +523,7 @@
     markAttendance: markAttendance,
     attendanceHistory: attendanceHistory, attendanceDashboard: attendanceDashboard,
     myAttendanceBatches: myAttendanceBatches,
+    attendanceInsights: attendanceInsights,
     staffScopes: staffScopes, setStaffScope: setStaffScope,
     resolveUpi: resolveUpi, setCollectionAccount: setCollectionAccount,
     payoutRules: payoutRules, savePayoutRule: savePayoutRule,

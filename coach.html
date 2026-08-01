@@ -7,27 +7,79 @@
 <title>Attendance · Raj Sports</title>
 <link rel="icon" href="assets/img/favicon.svg">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="assets/css/app.css?v=14">
+<link rel="stylesheet" href="assets/css/app.css?v=15">
 <style>
-  /* A coach has one job on one screen, so this page carries no nav and
-     no filters. It is a rail of their batches and a register. */
-  .coach-wrap { padding-bottom: 24px; }
-  .who { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:13px; }
+  /* A coach has one job, so this page carries no nav. It carries three
+     answers instead: who is here now, which registers are missing, and
+     who has stopped turning up. */
+  .coach-wrap { padding-bottom: 30px; }
+  .who { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:12px; }
   .who h2 { font-size:19px; font-weight:700; margin:0; }
   .who .small { color:var(--text-3); }
-  .daybar { display:flex; align-items:center; gap:8px; margin-bottom:14px; }
+
+  .daybar { display:flex; align-items:center; gap:8px; margin-bottom:18px; }
   .daybar .btn { flex:none; }
   .daybar input { width:auto; flex:1; min-width:0; }
-  .chip .tick { display:inline-block; margin-right:5px; opacity:.85; }
-  .chip[data-runs="false"] { opacity:.62; }
+
+  /* ---------------- choosing the session ----------------
+     This was a horizontal rail of chips. A rail is right when the
+     choice is one word long and there are four steps to get through;
+     it is wrong here, because every option carries a time, a place and
+     a progress state, and a coach standing courtside reads them at a
+     glance rather than scrolling sideways for them. So: one card per
+     session, stacked, in the order the day runs. */
+  .sessions { display:grid; gap:9px; }
+  .sess {
+    display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:13px;
+    width:100%; text-align:left; padding:12px 14px; font:inherit; cursor:pointer;
+    background:var(--surface); color:var(--text);
+    border:1px solid var(--hair); border-left:3px solid transparent;
+    border-radius:var(--r-card); transition:transform 140ms var(--ease), border-color 160ms var(--ease), background 160ms var(--ease);
+  }
+  .sess:active { transform:scale(0.99); }
+  .sess[aria-pressed="true"] { border-color:var(--hair-2); border-left-color:var(--volt); background:var(--volt-haze); }
+  .sess-time { text-align:center; min-width:52px; font-variant-numeric:tabular-nums; line-height:1.15; }
+  .sess-time b { display:block; font-size:15px; font-weight:700; letter-spacing:-0.02em; }
+  .sess-time small { font-size:10.5px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.06em; }
+  .sess-main { display:grid; min-width:0; }
+  .sess-t { display:block; font-weight:650; font-size:14.5px; letter-spacing:-0.01em;
+            overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sess-s { display:block; font-size:12px; color:var(--text-3); margin-top:2px; }
+  .sess-s .now { color:var(--due); font-weight:640; }
+  .sess-end { display:flex; align-items:center; gap:8px; }
+
+  /* The ring states a fact, so it never uses the accent. Ochre while a
+     register is unfinished, quiet grey once it is done: colour is spent
+     only on what still needs doing. */
+  .ring { width:36px; height:36px; flex:none; transform:rotate(-90deg); }
+  .ring circle { fill:none; stroke-width:3.5; }
+  .ring .ring-t { stroke:var(--sunken); }
+  .ring .ring-f { stroke:var(--due); stroke-linecap:round; transition:stroke-dashoffset 520ms var(--ease); }
+  .ring.is-done .ring-f { stroke:var(--paid); }
+  .ring-wrap { position:relative; display:grid; place-items:center; }
+  .ring-n {
+    position:absolute; font-size:11px; font-weight:680; font-variant-numeric:tabular-nums;
+    color:var(--text-2);
+  }
+  .ring.is-done + .ring-n { color:var(--paid); }
+
+  .more { margin-top:11px; }
+  .more > summary {
+    list-style:none; cursor:pointer; font-size:12.5px; font-weight:620; color:var(--text-2);
+    padding:9px 2px; display:flex; align-items:center; gap:7px;
+  }
+  .more > summary::-webkit-details-marker { display:none; }
+  .more > summary::before { content:"▸"; font-size:10px; color:var(--text-3); transition:transform 160ms var(--ease); }
+  .more[open] > summary::before { transform:rotate(90deg); }
+  .more .sessions { margin-top:4px; }
+
+  /* ---------------- the register ---------------- */
   .roll-head { padding:15px 16px; border-bottom:1px solid var(--hair); }
   .roll-foot {
     display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap;
     justify-content:space-between; padding:11px 16px; border-bottom:1px solid var(--hair);
   }
   .roll-actions { display:flex; gap:8px; }
-  /* Pills for anything pressable. "Not held" stays the quieter of the
-     two, but a bare word next to a pill does not read as a control. */
   .roll-actions .btn-ghost { border:1px solid var(--hair-2); }
   .roll-summary { display:flex; gap:14px; color:var(--text-2); font-size:12px; font-variant-numeric:tabular-nums; }
   .roll-summary b { color:var(--text); font-size:17px; margin-right:3px; }
@@ -47,9 +99,80 @@
   .attendance-mark[data-status="present"][aria-pressed="true"] { background:var(--volt); border-color:var(--volt); color:var(--on-volt); }
   .attendance-mark[data-status="absent"][aria-pressed="true"] { background:var(--overdue-haze); border-color:var(--overdue); color:var(--overdue); }
   .auto-save { color:var(--text-3); font-size:11px; }
+  .streak { color:var(--overdue); font-weight:620; }
+
+  /* ---------------- the month ---------------- */
+  .cal-hd { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:14px 16px 10px; }
+  .cal-hd h2 { font-size:15.5px; font-weight:680; margin:0; letter-spacing:-0.01em; }
+  .cal-nav { display:flex; gap:6px; }
+  .cal-grid {
+    display:grid; grid-template-columns:repeat(7, 1fr); gap:5px; padding:0 12px 12px;
+    max-width:420px;   /* a month is a month; on a wide screen it should not become a wall */
+  }
+  .cal-dow {
+    text-align:center; font-size:10.5px; font-weight:640; color:var(--text-3);
+    text-transform:uppercase; letter-spacing:0.06em; padding-bottom:4px;
+  }
+  .cal-d {
+    position:relative; display:grid; place-content:center; gap:2px; justify-items:center;
+    aspect-ratio:1; padding:0; font:inherit; cursor:pointer; color:var(--text-3);
+    background:transparent; border:1px solid transparent; border-radius:var(--r-chip);
+    animation:cal-in 260ms var(--ease) backwards;
+  }
+  @keyframes cal-in { from { opacity:0; transform:translateY(3px); } }
+  .cal-n { font-size:12.5px; font-weight:620; font-variant-numeric:tabular-nums; line-height:1; }
+  .cal-m { font-size:9.5px; font-variant-numeric:tabular-nums; line-height:1; opacity:.9; }
+  .cal-d:disabled { cursor:default; }
+  /* Held is a fact and stays quiet. Ochre is a class that did not run,
+     brick is a register nobody took: only the two that need a human get
+     colour. */
+  .cal-d.is-held    { background:var(--sunken); color:var(--text); }
+  .cal-d.is-off     { background:var(--due-haze); color:var(--due); }
+  .cal-d.is-missing { background:var(--overdue-haze); color:var(--overdue); font-weight:680; }
+  .cal-d.is-ahead   { border-style:dashed; border-color:var(--hair-2); color:var(--text-3); }
+  .cal-d.is-today .cal-n { text-decoration:underline; text-underline-offset:3px; }
+  .cal-d[aria-current="date"] { border-color:var(--volt); border-width:2px; color:var(--text); }
+  .cal-key { display:flex; flex-wrap:wrap; gap:6px 14px; padding:0 16px 15px; font-size:11.5px; color:var(--text-3); }
+  .cal-key span { display:inline-flex; align-items:center; gap:6px; }
+  .cal-key i { width:10px; height:10px; border-radius:3px; display:inline-block; }
+  .k-held { background:var(--sunken); } .k-off { background:var(--due-haze); }
+  .k-missing { background:var(--overdue-haze); } .k-ahead { border:1px dashed var(--hair-2); }
+
+  /* ---------------- where each student stands ---------------- */
+  .stand-hd {
+    display:flex; align-items:baseline; justify-content:space-between; gap:10px;
+    padding:13px 16px 9px; border-bottom:1px solid var(--hair);
+  }
+  .stand-hd h2 { font-size:14px; font-weight:680; margin:0; }
+  .stand-hd .small { color:var(--text-3); }
+  .stand { display:flex; align-items:center; gap:11px; padding:11px 14px; border-bottom:1px solid var(--hair); }
+  .stand:last-child { border-bottom:0; }
+  .stand .avatar { flex:none; }
+  .stand-main { flex:1; min-width:0; }
+  .stand-t { font-weight:620; font-size:14px; }
+  .stand-s { font-size:11.5px; color:var(--text-3); margin-top:2px; }
+  .stand-end { flex:none; width:88px; text-align:right; }
+  .stand-p { font-size:14px; font-weight:680; font-variant-numeric:tabular-nums; }
+  .stand-bar { height:4px; border-radius:3px; background:var(--sunken); overflow:hidden; margin-top:5px; }
+  .stand-fill {
+    display:block; height:100%; border-radius:3px; background:var(--paid);
+    transform-origin:left center; animation:bar-in 620ms var(--ease) backwards;
+  }
+  @keyframes bar-in { from { transform:scaleX(0); } }
+  .stand.is-watch .stand-fill { background:var(--overdue); }
+  .stand.is-watch .stand-p { color:var(--overdue); }
+  .stand-note { padding:11px 16px; font-size:12px; color:var(--text-3); border-bottom:1px solid var(--hair); background:var(--raised); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cal-d, .stand-fill { animation:none; }
+    .ring .ring-f { transition:none; }
+  }
   @media (min-width:700px) {
     .attendance-row { display:grid; grid-template-columns:minmax(280px,1fr) minmax(220px,260px); align-items:center; gap:20px; padding:13px 16px; }
     .mark-actions { margin:0; }
+    .sessions { grid-template-columns:repeat(2, 1fr); }
+    .cal-grid { gap:7px; padding:0 16px 16px; }
+    .cal-n { font-size:13.5px; }
   }
 </style>
 </head>
@@ -67,28 +190,47 @@
     <button class="btn btn-sm" id="dayToday" type="button">Today</button>
   </div>
 
-  <div class="rail-step" id="batchStep">
-    <div class="rail-k"><span class="rail-n">1</span><span>Choose your batch</span></div>
-    <div class="rail" id="batchRail"></div>
+  <section class="section">
+    <div class="eyebrow" id="pickHd">Sessions</div>
+    <div class="sessions" id="sessions"></div>
+    <details class="more hide" id="moreWrap">
+      <summary id="moreLabel">Other batches</summary>
+      <div class="sessions" id="moreSessions"></div>
+    </details>
+  </section>
+
+  <div class="tabs section" id="tabs" role="tablist">
+    <button type="button" data-tab="register" aria-selected="true">Register</button>
+    <button type="button" data-tab="calendar" aria-selected="false">Month</button>
+    <button type="button" data-tab="students" aria-selected="false">Students</button>
   </div>
 
-  <section class="section"><div class="card" id="register"></div></section>
+  <section class="section" id="paneRegister"><div class="card" id="register"></div></section>
+
+  <section class="section hide" id="paneCalendar">
+    <div class="metrics mb-2" id="pulse"></div>
+    <div class="card" id="calendar"></div>
+  </section>
+
+  <section class="section hide" id="paneStudents"><div class="card" id="standings"></div></section>
 </main>
 
-<script src="assets/js/cloud.js?v=14"></script>
-<script src="assets/js/core.js?v=14"></script>
+<script src="assets/js/cloud.js?v=15"></script>
+<script src="assets/js/core.js?v=15"></script>
 <script>
 (function () {
   if (!App.requireSignedIn()) return;
   App.shell(null, "Attendance", { minimal: true });
   RS.track("page_view");
 
-  var dateEl = App.$("#attDate"), rail = App.$("#batchRail"), register = App.$("#register");
+  var dateEl = App.$("#attDate"), register = App.$("#register");
   var batches = [], batch = null, roster = [], marks = {}, saving = {};
   var sessionStatus = null, sessionSavedAt = null;
+  var insights = null, insightKey = "", calMonth = null, tab = "register";
 
   dateEl.value = App.isoDate();
   dateEl.max = App.isoDate();          // the register cannot run ahead of the day
+  calMonth = monthStart(dateEl.value);
 
   RS.access().then(function (a) {
     var where = (a.centres || []).map(function (c) { return c.name; }).join(", ");
@@ -96,58 +238,303 @@
     App.$("#whoWhere").textContent = where || (a.email || "");
   });
 
-  /* ---------------- the batch rail ---------------- */
+  /* ---------------- dates ---------------- */
+  function monthStart(iso) { var d = App.parseDate(iso); return new Date(d.getFullYear(), d.getMonth(), 1); }
+  function monthEnd(d) { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
+  function sameMonth(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth(); }
+  function monthLabel(d) { return d.toLocaleDateString("en-IN", { month: "long", year: "numeric" }); }
+
+  /* ---------------- choosing the session ----------------
+     Today's classes lead, in the order the day runs. Everything else is
+     one tap away rather than gone, because a makeup session and a
+     forgotten Thursday both need a register. */
   function loadBatches() {
-    rail.innerHTML = '<div class="skeleton skeleton-row" style="width:150px"></div>' +
-                     '<div class="skeleton skeleton-row" style="width:120px"></div>';
+    var host = App.$("#sessions");
+    host.innerHTML = '<div class="skeleton" style="height:62px;border-radius:14px"></div>' +
+                     '<div class="skeleton" style="height:62px;border-radius:14px"></div>';
     RS.myAttendanceBatches(dateEl.value).then(function (rows) {
-      // Today's classes first: that is what the coach is standing in
-      // front of. Everything else stays reachable for a makeup session.
       batches = (rows || []).slice().sort(function (a, b) {
-        return (b.runs_today ? 1 : 0) - (a.runs_today ? 1 : 0);
+        if (!!b.runs_today !== !!a.runs_today) return (b.runs_today ? 1 : 0) - (a.runs_today ? 1 : 0);
+        return String(a.start_time || "").localeCompare(String(b.start_time || ""));
       });
       if (!batches.length) {
-        rail.innerHTML = "";
+        host.innerHTML = "";
+        App.$("#tabs").classList.add("hide");
         App.empty(register, "No batches assigned yet",
           "Ask the academy to add your centre so your batches appear here.");
         return;
       }
+      App.$("#tabs").classList.remove("hide");
       if (!batch || !batches.some(function (b) { return b.batch_id === batch.batch_id; })) {
         batch = batches[0];
       } else {
         batch = batches.filter(function (b) { return b.batch_id === batch.batch_id; })[0];
       }
-      renderRail();
+      renderPicker();
       loadRoster();
-    }).catch(function (e) { rail.innerHTML = ""; App.fail(register, e); });
+      loadInsights();
+    }).catch(function (e) { host.innerHTML = ""; App.fail(register, e); });
   }
 
-  function renderRail() {
-    rail.innerHTML = batches.map(function (b) {
-      var done = b.students > 0 && b.marked >= b.students;
-      return '<button class="chip" type="button" data-batch="' + b.batch_id + '"' +
-        ' data-runs="' + (b.runs_today ? "true" : "false") + '"' +
-        ' aria-pressed="' + (batch && b.batch_id === batch.batch_id) + '">' +
-        (done ? '<span class="tick" aria-hidden="true">✓</span>' : "") +
-        App.esc(b.centre_name + " · " + b.batch_name) +
-        "<small>" + App.esc(label(b)) + "</small></button>";
-    }).join("");
-    App.$$("[data-batch]", rail).forEach(function (el) {
+  function renderPicker() {
+    var today = batches.filter(function (b) { return b.runs_today; });
+    var rest  = batches.filter(function (b) { return !b.runs_today; });
+    var isToday = dateEl.value === App.isoDate();
+
+    App.$("#pickHd").textContent =
+      today.length ? (isToday ? "Today's sessions" : "Sessions on " + App.shortDate(dateEl.value))
+                   : "No class scheduled on " + App.shortDate(dateEl.value);
+    App.$("#sessions").innerHTML = today.map(card).join("") ||
+      '<div class="card card-pad small" style="color:var(--text-3)">' +
+      "Nothing is timetabled for this day. Open another batch below to take a makeup register.</div>";
+
+    var more = App.$("#moreWrap");
+    more.classList.toggle("hide", !rest.length);
+    if (rest.length) {
+      App.$("#moreLabel").textContent = today.length
+        ? "Other batches (" + rest.length + ")" : "All batches (" + rest.length + ")";
+      App.$("#moreSessions").innerHTML = rest.map(card).join("");
+      if (!today.length) more.open = true;
+    }
+
+    App.$$("[data-batch]").forEach(function (el) {
       el.addEventListener("click", function () {
-        batch = batches.filter(function (b) { return b.batch_id === +el.dataset.batch; })[0];
-        renderRail();
-        loadRoster();
+        var next = batches.filter(function (b) { return b.batch_id === +el.dataset.batch; })[0];
+        if (!next || (batch && next.batch_id === batch.batch_id)) return;
+        batch = next;
+        renderPicker(); loadRoster(); loadInsights();
       });
     });
   }
 
-  function label(b) {
-    var t = [App.timeOf(b.start_time), App.timeOf(b.end_time)].filter(Boolean).join(" to ");
+  /* Marked out of enrolled, as a ring. A number alone does not say
+     "nearly there"; a ring does it without reading. */
+  function ringHtml(marked, total) {
+    var pct = total ? Math.min(marked / total, 1) : 0;
+    var c = 2 * Math.PI * 15, done = total > 0 && marked >= total;
+    return '<span class="ring-wrap">' +
+      '<svg class="ring' + (done ? " is-done" : "") + '" viewBox="0 0 36 36" aria-hidden="true">' +
+        '<circle class="ring-t" cx="18" cy="18" r="15"></circle>' +
+        '<circle class="ring-f" cx="18" cy="18" r="15" style="stroke-dasharray:' + c.toFixed(1) +
+          ';stroke-dashoffset:' + (c * (1 - pct)).toFixed(1) + '"></circle>' +
+      "</svg>" +
+      '<span class="ring-n">' + (done ? "✓" : marked + "/" + total) + "</span></span>";
+  }
+
+  function runningNow(b) {
+    if (!b.runs_today || dateEl.value !== App.isoDate() || !b.start_time || !b.end_time) return false;
+    var now = new Date(), hm = String(now.getHours()).padStart(2, "0") + ":" +
+                               String(now.getMinutes()).padStart(2, "0");
+    return hm >= String(b.start_time).slice(0, 5) && hm <= String(b.end_time).slice(0, 5);
+  }
+
+  function card(b) {
+    var t = App.timeOf(b.start_time) || "", ap = t.slice(-2), hh = t.slice(0, -2);
     var bits = [];
-    if (t) bits.push(t);
-    if (!b.runs_today) bits.push("not scheduled");
-    else if (b.students) bits.push(b.marked + " of " + b.students + " marked");
-    return bits.join(" · ");
+    if (b.sport) bits.push(App.cap(b.sport));
+    bits.push(b.students + (b.students === 1 ? " student" : " students"));
+    if (b.session_status === "cancelled") bits.push("not held");
+    var now = runningNow(b) ? '<span class="now">Now</span> · ' : "";
+    return '<button class="sess" type="button" data-batch="' + b.batch_id + '"' +
+      ' aria-pressed="' + (batch && b.batch_id === batch.batch_id) + '">' +
+      '<span class="sess-time">' + (hh ? "<b>" + App.esc(hh) + "</b><small>" + ap + "</small>" : "<b>·</b>") + "</span>" +
+      '<span class="sess-main"><span class="sess-t">' +
+        App.esc(b.centre_name + " · " + b.batch_name) + "</span>" +
+        '<span class="sess-s">' + now + App.esc(bits.join(" · ")) + "</span></span>" +
+      '<span class="sess-end">' + ringHtml(b.marked || 0, b.students || 0) + "</span></button>";
+  }
+
+  /* ---------------- the month, the rates, the standings ----------------
+     Two windows, because they answer two different questions and one
+     window would answer neither honestly. The calendar is a month, so
+     it asks for that month. "Is this batch holding up" and "who has
+     stopped coming" are about recent form, so they ask for the last 30
+     days: on the first of a month the calendar is nearly empty, and a
+     pulse that read zero every month-start would be useless on exactly
+     the morning a coach checks it. Each number is labelled with the
+     window it came from. */
+  function loadInsights() {
+    if (!batch) return;
+    var mFrom = App.isoDate(calMonth), mTo = App.isoDate(monthEnd(calMonth));
+    var rFrom = App.isoDate(addDays(App.parseDate(dateEl.value), -29));
+    var key = batch.batch_id + ":" + mFrom + ":" + rFrom;
+    if (key === insightKey && insights) { renderInsights(); return; }
+    insightKey = key;
+    App.$("#calendar").innerHTML = '<div class="skeleton" style="height:300px;border-radius:14px"></div>';
+    App.$("#standings").innerHTML = "";
+    Promise.all([
+      RS.attendanceInsights(batch.batch_id, mFrom, mTo),
+      RS.attendanceInsights(batch.batch_id, rFrom, dateEl.value)
+    ]).then(function (r) {
+      if (insightKey !== key) return;          // the coach moved on while this was in flight
+      insights = { month: r[0] || null, recent: r[1] || null };
+      renderInsights();
+      renderRoster();                          // the register borrows the absent streaks
+    }).catch(function (e) {
+      insights = null;
+      App.fail(App.$("#calendar"), e);
+    });
+  }
+
+  function addDays(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
+
+  function renderInsights() {
+    if (!insights) return;
+    renderPulse(); renderCalendar(); renderStandings();
+  }
+
+  function renderPulse() {
+    var s = (insights.recent && insights.recent.summary) || {};
+    App.$("#pulse").innerHTML =
+      met("Sessions", s.held || 0, 0, "held in 30 days", "") +
+      met("Attendance", s.rate == null ? "—" : s.rate, 0, "of marks present", "", "%") +
+      // "6" reads as a headcount; "6.0" reads as a measurement. Keep the
+      // decimal only when there is one.
+      met("Typical", s.avg_present == null ? "—" : s.avg_present,
+          (+s.avg_present % 1 ? 1 : 0), "students present", "") +
+      met("Missing", s.missing || 0, 0, "registers not taken", s.missing ? "is-overdue" : "is-paid");
+
+    // Numbers count up once on arrival, because the number is the news.
+    App.$$("#pulse [data-count]").forEach(function (el) {
+      var dp = +el.dataset.dp || 0, suffix = el.dataset.suffix || "";
+      App.countUp(el, +el.dataset.count, {
+        format: function (v) { return v.toFixed(dp) + suffix; }
+      });
+    });
+
+    function met(k, v, dp, sub, cls, suffix) {
+      var known = v !== "—";
+      return '<div class="metric ' + cls + '"><div class="eyebrow">' + App.esc(k) + "</div>" +
+        '<div class="metric-v"' +
+          (known ? ' data-count="' + v + '" data-dp="' + dp + '" data-suffix="' + (suffix || "") + '"' : "") +
+          ">" + (known ? "0" + (suffix || "") : "—") + "</div>" +
+        '<div class="metric-s">' + App.esc(sub) + "</div></div>";
+    }
+  }
+
+  function renderCalendar() {
+    var cal = (insights.month && insights.month.calendar) || [], today = App.isoDate();
+    var byDate = {};
+    cal.forEach(function (d) { byDate[d.date] = d; });
+
+    var first = new Date(calMonth), lead = (first.getDay() + 6) % 7;   // weeks start Monday
+    var last = monthEnd(calMonth).getDate();
+    var cells = "";
+    for (var i = 0; i < lead; i++) cells += '<span class="cal-d" aria-hidden="true"></span>';
+    for (var day = 1; day <= last; day++) {
+      var iso = App.isoDate(new Date(calMonth.getFullYear(), calMonth.getMonth(), day));
+      var d = byDate[iso] || { state: "none", scheduled: false, present: 0, absent: 0 };
+      // Today counts as still to come: the class may not have met yet.
+      var ahead = iso >= today && d.scheduled && d.state === "none";
+      var cls = ["cal-d"];
+      if (d.state === "held") cls.push("is-held");
+      else if (d.state === "off") cls.push("is-off");
+      else if (d.state === "missing") cls.push("is-missing");
+      else if (ahead) cls.push("is-ahead");
+      if (iso === today) cls.push("is-today");
+      var mark = d.state === "held" ? String(d.present)
+               : d.state === "off" ? "off"
+               : d.state === "missing" ? "!" : "";
+      var label = App.longDate(iso) + ": " + (
+        d.state === "held" ? d.present + " present, " + d.absent + " absent"
+        : d.state === "off" ? "not held"
+        : d.state === "missing" ? "register not taken"
+        : ahead ? "class scheduled" : "no class");
+      cells += '<button class="' + cls.join(" ") + '" type="button" data-day="' + iso + '"' +
+        (iso === dateEl.value ? ' aria-current="date"' : "") +
+        (iso > today ? " disabled" : "") +
+        ' style="animation-delay:' + Math.min(day * 9, 220) + 'ms"' +
+        ' aria-label="' + App.esc(label) + '">' +
+        '<span class="cal-n">' + day + "</span>" +
+        (mark ? '<span class="cal-m">' + mark + "</span>" : "") + "</button>";
+    }
+
+    var atNow = sameMonth(calMonth, new Date());
+    App.$("#calendar").innerHTML =
+      '<div class="cal-hd"><h2>' + App.esc(monthLabel(calMonth)) + "</h2>" +
+        '<div class="cal-nav">' +
+          '<button class="btn btn-sm btn-ghost" id="calPrev" type="button" aria-label="Previous month">‹</button>' +
+          '<button class="btn btn-sm btn-ghost" id="calNext" type="button" aria-label="Next month"' +
+            (atNow ? " disabled" : "") + ">›</button>" +
+        "</div></div>" +
+      '<div class="cal-grid">' +
+        ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(function (d) {
+          return '<span class="cal-dow">' + d + "</span>"; }).join("") +
+        cells +
+      "</div>" +
+      '<div class="cal-key">' +
+        '<span><i class="k-held"></i>held, with the count</span>' +
+        '<span><i class="k-off"></i>not held</span>' +
+        '<span><i class="k-missing"></i>register missing</span>' +
+        '<span><i class="k-ahead"></i>still to come</span>' +
+      "</div>";
+
+    App.$("#calPrev").addEventListener("click", function () { stepMonth(-1); });
+    App.$("#calNext").addEventListener("click", function () { stepMonth(1); });
+    App.$$("[data-day]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        // Tapping a day is how a coach fixes a Thursday they missed.
+        dateEl.value = el.dataset.day;
+        showTab("register");
+        loadBatches();
+      });
+    });
+  }
+
+  function stepMonth(n) {
+    var next = new Date(calMonth.getFullYear(), calMonth.getMonth() + n, 1);
+    if (next > new Date()) return;
+    calMonth = next;
+    loadInsights();
+  }
+
+  /* Sorted by who needs a word, not alphabetically. A coach reading
+     this before a session wants the three names worth mentioning. */
+  function renderStandings() {
+    var recent = insights.recent || {};
+    var rows = (recent.students || []).slice();
+    var host = App.$("#standings");
+    if (!rows.length) {
+      App.empty(host, "Nothing marked yet",
+        "Take a register and each student's attendance appears here.");
+      return;
+    }
+    var s = recent.summary || {};
+    var watch = rows.filter(isWatch);
+    host.innerHTML =
+      '<div class="stand-hd"><h2>Last 30 days</h2>' +
+        '<div class="small">' + (s.held || 0) + (s.held === 1 ? " session" : " sessions") + " held</div></div>" +
+      (watch.length
+        ? '<div class="stand-note">' + watch.length +
+          (watch.length === 1 ? " student needs" : " students need") +
+          " a word: three or more missed in a row, or under 60 percent.</div>"
+        : "") +
+      rows.map(standRow).join("");
+  }
+
+  function isWatch(r) {
+    return (r.absent_streak || 0) >= 3 || (r.sessions >= 3 && r.rate != null && +r.rate < 60);
+  }
+
+  function standRow(r) {
+    var pct = r.rate == null ? null : Math.round(+r.rate);
+    var bits = [];
+    if (r.sessions) bits.push(r.present + " of " + r.sessions);
+    if ((r.absent_streak || 0) >= 2) {
+      bits.push('<span class="streak">' + r.absent_streak + " missed in a row</span>");
+    } else if (r.last_present) {
+      bits.push("last here " + App.shortDate(r.last_present));
+    } else if (!r.sessions) {
+      bits.push("no sessions yet");
+    }
+    if (r.status !== "active") bits.push("left the batch");
+    return '<div class="stand' + (isWatch(r) ? " is-watch" : "") + '">' +
+      '<div class="avatar">' + App.esc(App.initials(r.name)) + "</div>" +
+      '<div class="stand-main"><div class="stand-t">' + App.esc(r.name) + "</div>" +
+        '<div class="stand-s">' + bits.join(" · ") + "</div></div>" +
+      '<div class="stand-end"><div class="stand-p">' + (pct == null ? "—" : pct + "%") + "</div>" +
+        '<div class="stand-bar"><span class="stand-fill" style="width:' + (pct == null ? 0 : pct) + '%"></span></div>' +
+      "</div></div>";
   }
 
   /* ---------------- the register ---------------- */
@@ -165,7 +552,16 @@
     }).catch(function (e) { App.fail(register, e); });
   }
 
+  function streakOf(enrollmentId) {
+    var rows = (insights && insights.recent && insights.recent.students) || [];
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].enrollment_id === enrollmentId) return rows[i].absent_streak || 0;
+    }
+    return 0;
+  }
+
   function renderRoster() {
+    if (!batch) return;
     if (!roster.length) {
       App.empty(register, "No students in this batch",
         "Nobody is enrolled here on " + App.longDate(dateEl.value) + ".");
@@ -206,10 +602,18 @@
 
   /* A coach sees the student and the parent's name, never a phone
      number and never a rupee. The roster function returns the phone for
-     the manager's screen; this one simply does not show it. */
+     the manager's screen; this one simply does not show it.
+
+     It does show a run of absences, because the person holding the
+     register is the one who can ask where the child has been. */
   function rowHtml(r) {
     var m = marks[r.enrollment_id] || {};
+    var run = streakOf(r.enrollment_id);
     var sub = [r.parent_name, r.sport ? App.cap(r.sport) : null].filter(Boolean).join(" · ");
+    if (run >= 2) {
+      sub = (sub ? sub + " · " : "") +
+        '<span class="streak">' + run + " missed in a row</span>";
+    }
     function mark(status, glyph, word) {
       var on = m.status === status;
       return '<button class="attendance-mark" data-mark="' + r.enrollment_id + '"' +
@@ -221,7 +625,7 @@
     return '<div class="attendance-row"><div class="attendance-main">' +
       '<div class="avatar">' + App.esc(App.initials(r.member_name)) + "</div>" +
       '<div class="row-main"><div class="row-t">' + App.esc(r.member_name) + "</div>" +
-      '<div class="row-s">' + App.esc(sub) + "</div></div></div>" +
+      '<div class="row-s">' + sub + "</div></div></div>" +
       '<div class="mark-actions">' + mark("present", "✓", "present") + mark("absent", "×", "absent") + "</div></div>";
   }
 
@@ -249,7 +653,7 @@
         batch.marked = result.marked;
         RS.track("attendance_marked", { batch: batch.batch_id, date: dateEl.value,
                                         status: next && next.status, by: "coach" });
-        renderRoster(); renderRail();
+        renderRoster(); renderPicker(); refreshInsights();
       })
       .catch(function (e) {
         delete saving[id];
@@ -257,6 +661,11 @@
         renderRoster(); App.toast(e.message, "bad");
       });
   }
+
+  // The calendar and the standings are now one mark out of date. Rather
+  // than block the tap on a second round trip, forget them and fetch
+  // again in the background.
+  function refreshInsights() { insightKey = ""; loadInsights(); }
 
   function markAllPresent() {
     var btn = this; btn.disabled = true; btn.textContent = "Saving…";
@@ -268,7 +677,10 @@
                                    enrollment: r.enrollment_id, status: "present" });
       });
     }, Promise.resolve())
-      .then(function () { App.toast("Everyone marked present", "good"); loadRoster(); loadBatches(); })
+      .then(function () {
+        App.toast("Everyone marked present", "good");
+        loadRoster(); loadBatches(); refreshInsights();
+      })
       .catch(function (e) {
         btn.disabled = false; btn.textContent = "All present";
         App.toast(e.message, "bad");
@@ -290,7 +702,7 @@
                               status: "cancelled", cancelReason: why })
             .then(function () {
               App.closeSheet(); App.toast("Session marked as not held");
-              loadRoster(); loadBatches();
+              loadRoster(); loadBatches(); refreshInsights();
             })
             .catch(function (e) { App.toast(e.message, "bad"); });
         });
@@ -298,20 +710,41 @@
     });
   }
 
+  /* ---------------- tabs ----------------
+     One underline that travels, not three that blink. */
+  var placeInk = App.tabInk(App.$("#tabs"));
+  function showTab(name) {
+    tab = name;
+    App.$$("#tabs button").forEach(function (b) {
+      b.setAttribute("aria-selected", String(b.dataset.tab === name));
+    });
+    App.$("#paneRegister").classList.toggle("hide", name !== "register");
+    App.$("#paneCalendar").classList.toggle("hide", name !== "calendar");
+    App.$("#paneStudents").classList.toggle("hide", name !== "students");
+    placeInk();
+    if (name !== "register") loadInsights();
+  }
+  App.$$("#tabs button").forEach(function (b) {
+    b.addEventListener("click", function () { showTab(b.dataset.tab); });
+  });
+
   /* ---------------- the day ---------------- */
+  function goToDay(iso) {
+    dateEl.value = iso;
+    var m = monthStart(iso);
+    if (!sameMonth(m, calMonth)) { calMonth = m; insightKey = ""; }
+    loadBatches();
+  }
   function shiftDay(n) {
     var d = App.parseDate(dateEl.value) || new Date();
     d.setDate(d.getDate() + n);
     if (App.isoDate(d) > App.isoDate()) { App.toast("Attendance cannot be taken ahead of today."); return; }
-    dateEl.value = App.isoDate(d);
-    loadBatches();
+    goToDay(App.isoDate(d));
   }
   App.$("#dayBack").addEventListener("click", function () { shiftDay(-1); });
   App.$("#dayFwd").addEventListener("click", function () { shiftDay(1); });
-  App.$("#dayToday").addEventListener("click", function () {
-    dateEl.value = App.isoDate(); loadBatches();
-  });
-  dateEl.addEventListener("change", loadBatches);
+  App.$("#dayToday").addEventListener("click", function () { goToDay(App.isoDate()); });
+  dateEl.addEventListener("change", function () { goToDay(dateEl.value); });
 
   loadBatches();
 })();

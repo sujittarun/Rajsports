@@ -372,6 +372,34 @@ them and the guarded functions are their entire reach.
 purpose: their `p_batch` is an optional **filter**, so a per-batch check would
 wave a null straight through and hand over every centre.
 
+### What the coach screen shows, and why each part earns its place
+
+`coach.html` is three answers, not one. All of them come from
+`my_attendance_insights(tenant, batch, from, to)` (migrations
+`2026-08-01c` / `d`, shared scope), whose `p_batch` is a **required target**
+rather than a filter — which is the only reason a coach may call it at all.
+It carries no money and no phone number, and a behaviour test asserts that.
+
+| | |
+|---|---|
+| **Register** | today's roster, plus a run of absences under a name, because the person holding the register is the one who can ask where the child has been |
+| **Month** | a calendar of held / not held / **register missing** / still to come. Tapping a day opens that day's register, which is how a forgotten Thursday actually gets fixed |
+| **Students** | attendance rate, last seen and absent streak, sorted by who needs a word rather than alphabetically |
+
+Two windows on purpose: the calendar is the month you are looking at, the
+pulse and the standings are the **last 30 days**. One window cannot do both,
+because on the first of a month a month-shaped pulse reads zero on exactly
+the morning a coach opens it.
+
+A register due **today** is not a register missed. `2026-08-01c` marked today
+brick red before the batch had met; `d` fixed it. A colour that means "go and
+fix something" is worth nothing if it cries wolf every morning.
+
+The session picker is a **stack of cards, not a rail** — the one place that
+departs from "choosers are rails". A rail is right when each option is one
+word; here every option carries a time, a venue and a progress ring, and a
+coach courtside reads them at a glance instead of scrolling sideways.
+
 The proof is behavioural, not a reading of the grants:
 `AcademyManager/supabase/tests/0039-attendance-access.sql` signs in as a coach
 and asserts what they can and cannot reach. Run it with
