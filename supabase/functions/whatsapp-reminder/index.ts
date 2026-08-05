@@ -485,14 +485,21 @@ function reasonText(reason: string) {
  *  its parent account at all — the first attempt at this asked for a
  *  field that does not exist.
  */
-async function wabaId(): Promise<string> {
+async function wabaId(cfg: WaConfig): Promise<string> {
+  /* Recorded id wins. Discovery answers "which WABA can this TOKEN
+     manage", which under one Business Manager is the same answer for
+     every academy — so with a shared system-user token it would report
+     the wrong tenant's account. tenants.config.whatsapp.wabaId is the
+     tenant-specific fact; discovery is only the fallback for a tenant
+     that has not recorded one yet. */
+  if (cfg.wabaId) return cfg.wabaId;
   const res = await fetch(
-    `${GRAPH}/debug_token?input_token=${encodeURIComponent(META_TOKEN)}`,
-    { headers: { Authorization: `Bearer ${META_TOKEN}` } },
+    `${GRAPH}/debug_token?input_token=${encodeURIComponent(cfg.token)}`,
+    { headers: { Authorization: `Bearer ${cfg.token}` } },
   );
   const out = await res.json();
   if (!res.ok) {
-    const t = META_TOKEN;
+    const t = cfg.token;
     throw new Error(
       (out?.error?.message || "could not inspect the token") +
       ` | token shape: length=${t.length}, starts_EAA=${t.startsWith("EAA")}`,
@@ -516,7 +523,7 @@ async function wabaId(): Promise<string> {
     for (const b of biz) {
       const r = await fetch(
         `${GRAPH}/${b}/owned_whatsapp_business_accounts?fields=id,name`,
-        { headers: { Authorization: `Bearer ${META_TOKEN}` } },
+        { headers: { Authorization: `Bearer ${cfg.token}` } },
       );
       const o = await r.json();
       if (r.ok && o?.data?.length) { id = String(o.data[0].id); break; }
@@ -548,10 +555,10 @@ async function wabaId(): Promise<string> {
  * parameters. An approved template with three is approved and wrong.
  */
 async function templateStatus(cfg: WaConfig, override?: string) {
-  const waba = override || await wabaId();
+  const waba = override || await wabaId(cfg);
   const res = await fetch(
     `${GRAPH}/${waba}/message_templates?fields=name,status,category,language,components,rejected_reason&limit=50`,
-    { headers: { Authorization: `Bearer ${META_TOKEN}` } },
+    { headers: { Authorization: `Bearer ${cfg.token}` } },
   );
   const out = await res.json();
   if (!res.ok) return { error: out?.error?.message || "could not list templates" };
@@ -835,10 +842,11 @@ Deno.serve(async (req) => {
            messaging works and management does not, which is a different
            fix from a token with no assets at all. Ids are identifiers,
            not secrets — the token itself is never echoed. */
+        const probeCfg0 = await loadConfig(tenant);
         const ask = async (label: string, path: string) => {
           try {
             const r = await fetch(`${GRAPH}/${path}`, {
-              headers: { Authorization: `Bearer ${META_TOKEN}` },
+              headers: { Authorization: `Bearer ${probeCfg0.token}` },
             });
             const o = await r.json();
             return { probe: label, ok: r.ok, result: r.ok ? o : (o?.error?.message || o) };
@@ -872,12 +880,18 @@ Deno.serve(async (req) => {
            "is THIS academy's number healthy?". Falls back to the platform
            number when the tenant has none, because platform-level
            diagnostics are still useful. */
-        const probeCfg = await loadConfig(tenant);
+        const probeCfg = probeCfg0;
         const probePhone = probeCfg.phoneNumberId || META_PHONE;
         return json({
           for_tenant: tenant,
           using_number_id: probePhone,
-          is_platform_number: !probeCfg.phoneNumberId,
+          /* Compare the RESOLVED id against the platform's, rather than
+             reporting whether a fallback happened. mpp has its own
+             config entry and still points at +91 82977 71212, so the
+             fallback flag read "not the platform number" about the
+             platform number. */
+          is_platform_number: !!META_PHONE && probePhone === META_PHONE,
+          configured_for_tenant: !!probeCfg.phoneNumberId,
           phone_number: await ask("the number itself", `${probePhone}?fields=id,display_phone_number,verified_name,quality_rating,status,code_verification_status,name_status,platform_type,throughput,account_mode,is_official_business_account,messaging_limit_tier`),
           its_waba: await ask("the account that owns it", `${probePhone}?fields=whatsapp_business_account{id,name}`),
           me: await ask("who the token is", "me?fields=id,name"),
@@ -903,17 +917,25 @@ Deno.serve(async (req) => {
            bare "(#100) Invalid parameter" naming nothing.
            `GET /{waba}/subscribed_apps` returning an empty array is the
            only way to see it. */
-        const waba = url.searchParams.get("waba");
-        if (!waba) return json({ error: "?waba=... is required" }, 400);
+        const subCfg = await loadConfig(tenant);
+        /* Which app gets subscribed is decided by the TOKEN, not by the
+           parameter — so this is the route that enforces which Meta app
+           an academy's account is wired to. Defaults to the tenant's own
+           WABA; ?waba= stays as the override. */
+        const waba = url.searchParams.get("waba") || subCfg.wabaId;
+        if (!waba) {
+          return json({ error: `?waba=... is required (${tenant} has no wabaId recorded)` }, 400);
+        }
         const r = await fetch(`${GRAPH}/${waba}/subscribed_apps`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${META_TOKEN}` },
+          headers: { Authorization: `Bearer ${subCfg.token}` },
         });
         const out = await r.json();
         const after = await fetch(`${GRAPH}/${waba}/subscribed_apps`, {
-          headers: { Authorization: `Bearer ${META_TOKEN}` },
+          headers: { Authorization: `Bearer ${subCfg.token}` },
         }).then((x) => x.json()).catch(() => null);
-        return json({ subscribed: r.ok, meta: out, now_subscribed: after }, r.ok ? 200 : 400);
+        return json({ for_tenant: tenant, waba, subscribed: r.ok, meta: out, now_subscribed: after },
+                    r.ok ? 200 : 400);
       }
 
       case "register": {
@@ -951,6 +973,16 @@ Deno.serve(async (req) => {
         const regCfg = await loadConfig(tenant);
         if (!regCfg.phoneNumberId) {
           return json({ error: `${tenant} has no phoneNumberId configured; nothing to register.` }, 400);
+        }
+        /* Registering sets that number's two-step PIN permanently (Meta
+           refuses to re-set it, code 133005) and locks registration
+           after ten attempts in 72 hours (133016). A tenant-scoped call
+           that lands on the platform number is therefore not a mistake
+           you can undo, so refuse it outright. */
+        if (META_PHONE && regCfg.phoneNumberId === META_PHONE && tenant !== "platform") {
+          return json({ error:
+            `refusing: ${tenant} resolves to the platform number (${META_PHONE}). ` +
+            `Give the academy its own phoneNumberId first.` }, 400);
         }
         const r = await fetch(`${base}/${regCfg.phoneNumberId}/register`, {
           method: "POST",
@@ -1026,6 +1058,10 @@ Deno.serve(async (req) => {
           amount: b.amount == null ? 2400 : Number(b.amount),
           months: 1, fee_source: "test",
           whatsapp_status: "queued", blocked_reason: null, already_sent: false,
+          /* No UPI on a test row on purpose: resolve_upi() decides where
+             real money is collected, and a hand-written vpa here would be
+             a payment instruction in a message that looks live. */
+          upi_id: null, upi_name: null, upi_source: null,
         };
         const res = await sendTemplate(to.length === 10 ? `91${to}` : to, sample, cfg);
         return json({
