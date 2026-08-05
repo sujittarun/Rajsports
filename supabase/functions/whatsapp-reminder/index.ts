@@ -142,6 +142,14 @@ type WaConfig = {
    *  with makes Meta reject the message, so this stays off until the
    *  template really has it. */
   upiParam: boolean;
+  /** This academy's OWN WhatsApp number. Empty means not onboarded yet,
+   *  and sending refuses — it must never borrow the platform number. */
+  phoneNumberId: string;
+  /** This academy's WhatsApp Business Account, for template checks. */
+  wabaId: string;
+  /** This academy's Meta token, or the platform System User token when
+   *  its number lives in our Business Manager. */
+  token: string;
 };
 
 /* The platform's own mark, not a tenant's. With one shared sender the
@@ -154,6 +162,30 @@ async function loadConfig(tenant: string): Promise<WaConfig> {
   const rows = await db(`/tenants?id=eq.${tenant}&select=name,config`);
   const cfg = rows?.[0]?.config || {};
   const wa = cfg.whatsapp || {};
+
+  /* WHICH NUMBER THIS ACADEMY SENDS FROM.
+     This used to be a single global env var, so every academy's parents
+     got a message from "Academy Manager". Now it is resolved per tenant,
+     and the platform number is NOT a fallback — see sendTemplate. The
+     token is optional: when a client's number sits in our own Business
+     Manager, one System User token sends from all of them, and only the
+     phone number id differs. whatsapp_credentials() is service-role only
+     because it hands back a live token. */
+  let phoneNumberId = "";
+  let wabaId = "";
+  let token = "";
+  try {
+    const creds = await rpc("whatsapp_credentials", { p_tenant: tenant });
+    if (creds?.ok) {
+      phoneNumberId = String(creds.phoneNumberId || "");
+      wabaId = String(creds.wabaId || "");
+      token = String(creds.token || "");
+    }
+  } catch (_) {
+    /* leave blank — sendTemplate fails closed rather than borrowing the
+       platform number, which is the whole point of this change */
+  }
+
   return {
     enabled: !!wa.enabled,
     mode: wa.mode === "auto" ? "auto" : "manual",
@@ -165,6 +197,10 @@ async function loadConfig(tenant: string): Promise<WaConfig> {
     lang: String(wa.templateLang || "en"),
     headerImage: String(wa.headerImage || DEFAULT_HEADER_IMAGE),
     upiParam: wa.upiParam === true,
+    phoneNumberId,
+    wabaId,
+    // fall back to the platform System User token, NOT to the platform NUMBER
+    token: token || META_TOKEN,
   };
 }
 
@@ -256,9 +292,21 @@ type SendResult =
   | { ok: false; code: string; message: string; retryable: boolean };
 
 async function sendTemplate(to: string, r: QueueRow, cfg: WaConfig): Promise<SendResult> {
-  if (!META_TOKEN || !META_PHONE) {
+  /* FAIL CLOSED. An academy with no number of its own does not send.
+     The tempting alternative — quietly using the platform number — is
+     the behaviour this change exists to remove: a client who believes
+     their parents hear from THEM would still be sending as us, and
+     would be spending the platform number's shared 250/day tier and
+     staking its quality rating on their content. */
+  if (!cfg.phoneNumberId) {
+    return { ok: false, code: "no_number", retryable: false,
+             message: `${cfg.brand} has no WhatsApp number of its own yet. ` +
+                      `Add its phone number id to tenants.config.whatsapp.phoneNumberId ` +
+                      `— reminders will not be sent from the platform number.` };
+  }
+  if (!cfg.token) {
     return { ok: false, code: "no_credentials", retryable: false,
-             message: "Meta WhatsApp credentials are not configured." };
+             message: "No Meta access token for this academy." };
   }
   /* One WhatsApp Business account sends for every academy, so the
      templates on it are shared and their wording cannot name one. The
@@ -306,9 +354,10 @@ async function sendTemplate(to: string, r: QueueRow, cfg: WaConfig): Promise<Sen
   };
 
   try {
-    const res = await fetch(`${GRAPH}/${META_PHONE}/messages`, {
+    // this academy's own number, resolved per tenant — never the platform's
+    const res = await fetch(`${GRAPH}/${cfg.phoneNumberId}/messages`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${META_TOKEN}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     const out = await res.json();
@@ -819,9 +868,18 @@ Deno.serve(async (req) => {
            the number has finished onboarding. Meta reports neither in
            the error. */
         const waba = url.searchParams.get("waba");
+        /* Probe the number belonging to ?tenant=, so an operator can ask
+           "is THIS academy's number healthy?". Falls back to the platform
+           number when the tenant has none, because platform-level
+           diagnostics are still useful. */
+        const probeCfg = await loadConfig(tenant);
+        const probePhone = probeCfg.phoneNumberId || META_PHONE;
         return json({
-          phone_number: await ask("the number itself", `${META_PHONE}?fields=id,display_phone_number,verified_name,quality_rating,status,code_verification_status,name_status,platform_type,throughput,account_mode,is_official_business_account,messaging_limit_tier`),
-          its_waba: await ask("the account that owns it", `${META_PHONE}?fields=whatsapp_business_account{id,name}`),
+          for_tenant: tenant,
+          using_number_id: probePhone,
+          is_platform_number: !probeCfg.phoneNumberId,
+          phone_number: await ask("the number itself", `${probePhone}?fields=id,display_phone_number,verified_name,quality_rating,status,code_verification_status,name_status,platform_type,throughput,account_mode,is_official_business_account,messaging_limit_tier`),
+          its_waba: await ask("the account that owns it", `${probePhone}?fields=whatsapp_business_account{id,name}`),
           me: await ask("who the token is", "me?fields=id,name"),
           scopes: await ask("what the token is allowed to do", "me/permissions"),
           businesses: await ask("businesses it can see", "me/businesses?fields=id,name"),
@@ -834,7 +892,7 @@ Deno.serve(async (req) => {
                five that would have worked. */
             waba_limit: await ask("messaging limit", `${waba}?fields=message_template_namespace,currency,timezone_id`),
             waba_health2: await ask("health status", `${waba}?fields=health_status`),
-            number_health: await ask("the number's health", `${META_PHONE}?fields=health_status`),
+            number_health: await ask("the number's health", `${probePhone}?fields=health_status`),
           } : {}),
         });
       }
@@ -887,9 +945,16 @@ Deno.serve(async (req) => {
            diagnostic must not do that. */
         const ver = url.searchParams.get("v");
         const base = ver ? `https://graph.facebook.com/${ver}` : GRAPH;
-        const r = await fetch(`${base}/${META_PHONE}/register`, {
+        /* Register the number belonging to ?tenant=. Defaulting to the
+           platform number here would mean an onboarding step for a new
+           academy silently re-registered ours. */
+        const regCfg = await loadConfig(tenant);
+        if (!regCfg.phoneNumberId) {
+          return json({ error: `${tenant} has no phoneNumberId configured; nothing to register.` }, 400);
+        }
+        const r = await fetch(`${base}/${regCfg.phoneNumberId}/register`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${META_TOKEN}`, "Content-Type": "application/json" },
+          headers: { Authorization: `Bearer ${regCfg.token}`, "Content-Type": "application/json" },
           body: JSON.stringify({
             messaging_product: "whatsapp",
             pin,
@@ -936,6 +1001,40 @@ Deno.serve(async (req) => {
         const b = await req.json().catch(() => ({}));
         if (!b.enrollment_id) return json({ error: "enrollment_id is required" }, 400);
         return await sendOne(tenant, Number(b.enrollment_id));
+      }
+      /* One real template message to ONE number you name, with sample
+         values. It exists because there was no way to prove the WhatsApp
+         setup works end to end without flipping a tenant to enabled+auto
+         — which would let the next cron sweep message that academy's real
+         parents. This route touches no tenant config, reads no queue and
+         writes no reminder row; it is a wire test and nothing else.
+
+         Still behind x-am-secret, because it can send a message. */
+      case "test": {
+        const b = await req.json().catch(() => ({}));
+        const to = String(b.to || "").replace(/\D/g, "");
+        if (to.length < 10) return json({ error: "to (a phone number) is required" }, 400);
+        const cfg = await loadConfig(tenant);
+        const stage = (b.stage === "due" || b.stage === "overdue") ? b.stage : "heads_up";
+        const sample: QueueRow = {
+          enrollment_id: 0, member_id: 0,
+          member_name: String(b.student || "Aarav"),
+          parent_name: null, phone: to,
+          centre: null, batch: null, sport: null,
+          due_date: String(b.due_date || new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10)),
+          days_since: 0, stage,
+          amount: b.amount == null ? 2400 : Number(b.amount),
+          months: 1, fee_source: "test",
+          whatsapp_status: "queued", blocked_reason: null, already_sent: false,
+        };
+        const res = await sendTemplate(to.length === 10 ? `91${to}` : to, sample, cfg);
+        return json({
+          test: true, to, stage,
+          template: templateFor(stage, cfg),
+          brand: cfg.brand,
+          header_image: cfg.headerImage,
+          result: res,
+        }, res.ok ? 200 : 400);
       }
       default: return json({ error: `Unknown route "${route}"` }, 404);
     }
